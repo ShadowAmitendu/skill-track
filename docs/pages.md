@@ -14,6 +14,7 @@
 4. Admin dashboard: admin
 - total trainees
 - total course providers
+- course providers pending for review.
 - consent given 
 - follow up status, how many responded, how many did not.
 - total consents.

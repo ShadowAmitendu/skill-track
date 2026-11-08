@@ -74,7 +74,7 @@ CREATE TYPE domain_category AS ENUM (
     'AR_VR_SPATIAL_COMPUTING',
     'HARDWARE_ENGINEERING',
     'UI_UX_DESIGN',
-    'QA_TESTING',
+    'QA_TESTING'
 );
 
 -- Unified login table for Admin, Course Provider, and Trainee.
@@ -200,7 +200,7 @@ CREATE TABLE course_skills (
 CREATE TABLE course_enrolments (
     id                 BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     trainee_id         BIGINT NOT NULL REFERENCES trainees(id) ON DELETE CASCADE,
-    course_id          BIGINT NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+    course_id          BIGINT NOT NULL REFERENCES courses(id) ON DELETE RESTRICT,
     enrolled_at        DATE NOT NULL DEFAULT CURRENT_DATE,
     completed_at       DATE,
     status             VARCHAR(30) NOT NULL DEFAULT 'IN_PROGRESS'
@@ -211,6 +211,8 @@ CREATE TABLE course_enrolments (
     -- Enforces that dropping out or kicking a trainee requires a reason
     CONSTRAINT chk_enrolment_termination_reason
         CHECK (status NOT IN ('DROPPED', 'KICKED') OR termination_reason IS NOT NULL),
+    CONSTRAINT chk_enrolment_dates
+        CHECK (completed_at IS NULL OR completed_at >= enrolled_at),
     UNIQUE (trainee_id, course_id)
 );
 
@@ -226,12 +228,12 @@ CREATE TABLE trainee_skills (
 );
 
 CREATE TABLE certifications (
+    id               BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     trainee_id       BIGINT NOT NULL REFERENCES trainees(id) ON DELETE CASCADE,
-    course_id        BIGINT REFERENCES courses(id) ON DELETE SET NULL,
+    course_id        BIGINT REFERENCES courses(id) ON DELETE RESTRICT,
     certificate_name VARCHAR(200) NOT NULL,
     file_s3_key      VARCHAR(500) UNIQUE NOT NULL,
     issued_at        DATE NOT NULL DEFAULT CURRENT_DATE,
-    PRIMARY KEY (trainee_id, file_s3_key),
     UNIQUE (trainee_id, course_id)
 );
 
@@ -278,7 +280,8 @@ CREATE TABLE role_required_skills (
 CREATE TABLE trainee_target_roles (
     trainee_id   BIGINT NOT NULL REFERENCES trainees(id) ON DELETE CASCADE,
     role_id      BIGINT NOT NULL REFERENCES roles(id) ON DELETE CASCADE,
-    target_level VARCHAR(50) NOT NULL DEFAULT 'ENTRY_LEVEL',
+    target_level VARCHAR(50) NOT NULL DEFAULT 'ENTRY_LEVEL'
+        CHECK (target_level IN ('INTERN', 'ENTRY_LEVEL', 'JUNIOR', 'MID_LEVEL', 'SENIOR')),
     PRIMARY KEY (trainee_id, role_id)
 );
 
@@ -289,7 +292,7 @@ CREATE TABLE trainee_target_roles (
 
 CREATE TABLE employers (
     id                  BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    name                VARCHAR(200) NOT NULL,
+    name                VARCHAR(200) UNIQUE NOT NULL,
     industry            VARCHAR(100)
 );
 
@@ -344,6 +347,10 @@ CREATE TABLE follow_ups (
 
 -- User role filtering
 CREATE INDEX idx_users_role ON users(role);
+
+CREATE INDEX idx_certifications_trainee ON certifications(trainee_id);
+
+CREATE INDEX idx_resumes_extracted_tokens ON trainee_resumes USING GIN (extracted_tokens);
 
 -- Partial index: fast lookup of unapproved Course Providers on Admin login
 CREATE INDEX idx_course_providers_unapproved

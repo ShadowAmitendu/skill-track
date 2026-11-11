@@ -1,77 +1,101 @@
-import { useEffect, useState } from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
-import Sidebar from "./components/Sidebar";
+import { useAuth } from "./context/useAuth";
+import { Navbar } from "./components/Navbar";
+import { RequireRole } from "./components/RequireRole";
+
+import Login from "./pages/Login";
+import Register from "./pages/Register";
 import Dashboard from "./pages/Dashboard";
 import Trainees from "./pages/Trainees";
 import TraineeProfile from "./pages/TraineeProfile";
-import Training from "./pages/Training";
+import TraineeMe from "./pages/TraineeMe";
+import CoursesAndProviders from "./pages/CoursesAndProviders";
+import ProviderProfile from "./pages/ProviderProfile";
 import Skills from "./pages/Skills";
-import SkillGapCalculator from "./pages/SkillGapCalculator";
 import Employment from "./pages/Employment";
-import FollowUps from "./pages/FollowUps";
-import NonPlacement from "./pages/NonPlacement";
-import { fetchApi } from "./api";
 
-function App() {
-  const [backendDown, setBackendDown] = useState(false);
+function RootRedirect() {
+  const { isAuthenticated } = useAuth();
+  if (!isAuthenticated) return <Navigate to="/login" replace />;
+  return <Navigate to="/dashboard" replace />;
+}
 
-  useEffect(() => {
-    let isMounted = true;
-    fetchApi("/health")
-      .then(() => {
-        if (isMounted) setBackendDown(false);
-      })
-      .catch(() => {
-        if (isMounted) setBackendDown(true);
-      });
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
+export default function App() {
   return (
-    <div className="min-h-screen flex flex-col">
-      <Sidebar />
+    <div className="min-h-screen flex flex-col bg-gray-50 text-gray-900 dark:bg-gray-950 dark:text-gray-50">
+      <Navbar />
 
-      <main className="flex-1 min-w-0">
-        {backendDown && (
-          <div className="mx-8 mt-6 bg-red-50 border border-red-200 rounded-2xl px-5 py-4 text-sm text-red-700">
-            <span className="font-semibold">Backend unreachable.</span> Start it with{" "}
-            <code className="font-mono">npm run dev</code> in{" "}
-            <code className="font-mono">backend/</code> (expects port 5000, proxied via
-            /api).
-          </div>
-        )}
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <Routes>
+          <Route path="/" element={<RootRedirect />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<Register />} />
 
-        <section className="p-8">
-          <Routes>
-            <Route path="/" element={<Navigate to="/dashboard" replace />} />
-            <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/trainees" element={<Trainees />} />
-            <Route path="/trainees/:id" element={<TraineeProfile />} />
-            <Route path="/training" element={<Training />} />
-            <Route path="/skills" element={<Skills />} />
-            <Route path="/skill-gaps" element={<SkillGapCalculator />} />
-            <Route path="/employment" element={<Employment />} />
-            <Route path="/follow-ups" element={<FollowUps />} />
-            <Route path="/non-placement" element={<NonPlacement />} />
-            <Route
-              path="*"
-              element={
-                <div className="bg-white border border-blue-100 rounded-2xl p-8 shadow-sm">
-                  <p className="text-sm font-medium text-blue-600">SkillTrack</p>
-                  <h1 className="text-2xl font-bold text-slate-900 mt-1">Page not found</h1>
-                  <p className="text-slate-500 mt-2">
-                    The page you are looking for does not exist.
-                  </p>
-                </div>
-              }
-            />
-          </Routes>
-        </section>
+          {/* Role-Specific Dashboard (All Authenticated Roles) */}
+          <Route
+            path="/dashboard"
+            element={
+              <RequireRole roles={["ADMIN", "COURSE_PROVIDER", "TRAINEE"]}>
+                <Dashboard />
+              </RequireRole>
+            }
+          />
+
+          {/* Admin & Course Provider */}
+          <Route
+            path="/trainees"
+            element={
+              <RequireRole roles={["ADMIN", "COURSE_PROVIDER"]}>
+                <Trainees />
+              </RequireRole>
+            }
+          />
+          <Route
+            path="/trainees/:id"
+            element={
+              <RequireRole roles={["ADMIN", "COURSE_PROVIDER"]}>
+                <TraineeProfile />
+              </RequireRole>
+            }
+          />
+          <Route
+            path="/employment"
+            element={
+              <RequireRole roles={["ADMIN", "COURSE_PROVIDER"]}>
+                <Employment />
+              </RequireRole>
+            }
+          />
+
+          {/* Trainee Only */}
+          <Route
+            path="/me"
+            element={
+              <RequireRole roles={["TRAINEE"]}>
+                <TraineeMe />
+              </RequireRole>
+            }
+          />
+
+          {/* Open to All Roles */}
+          <Route path="/courses" element={<CoursesAndProviders />} />
+          <Route path="/providers/:id" element={<ProviderProfile />} />
+          <Route path="/skills" element={<Skills />} />
+
+          <Route
+            path="*"
+            element={
+              <div className="max-w-md mx-auto my-14 p-6 bg-white border border-gray-200 rounded-lg text-center dark:bg-gray-900 dark:border-gray-800">
+                <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">404</p>
+                <h1 className="text-lg font-semibold text-gray-900 dark:text-gray-50 mt-1">Page Not Found</h1>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1.5">
+                  The page you requested does not exist or has been moved.
+                </p>
+              </div>
+            }
+          />
+        </Routes>
       </main>
     </div>
   );
 }
-
-export default App;

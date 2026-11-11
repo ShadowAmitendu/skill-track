@@ -1,7 +1,7 @@
 1. Login page: admin, trainee, cp
 - one login for all.
 
-2. Register page: trainee, cp
+2. Register page: trainee, cp (tabbed or dropdown asked!)
 - trainee 
 - course provider
 

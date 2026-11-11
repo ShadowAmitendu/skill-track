@@ -1,354 +1,606 @@
-import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
-import { Search, Users, Eye, CheckCircle2, XCircle, Plus } from "lucide-react";
-import { fetchApi } from "../api";
-import Pagination from "../components/Pagination";
-import AddTraineeModal from "../components/AddTraineeModal";
-import { paginate, PAGE_SIZE } from "../utils/pagination";
+import { useState, useMemo } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import {
+  useReactTable,
+  getCoreRowModel,
+  getPaginationRowModel,
+  getSortedRowModel,
+  flexRender,
+} from "@tanstack/react-table";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import * as z from "zod";
+import { traineeApi, adminApi } from "../api/endpoints";
+import { useAuth } from "../context/useAuth";
+import { useToast } from "../components/ui/useToast";
+import {
+  Search,
+  Plus,
+  Eye,
+  Trash2,
+  ChevronLeft,
+  ChevronRight,
+  Users,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
+  X,
+} from "lucide-react";
+import { Button } from "../components/ui/Button";
+import { Badge } from "../components/ui/Badge";
+import { Avatar } from "../components/ui/Avatar";
+import { Switch } from "../components/ui/Switch";
+import { Select } from "../components/ui/Select";
+import { Card } from "../components/ui/Card";
+import { Field, Input } from "../components/ui/Field";
+import { LoadingState, ErrorState, EmptyState } from "../components/ui/QueryState";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+  DialogClose,
+} from "../components/ui/Dialog";
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogClose,
+} from "../components/ui/AlertDialog";
 
-function Trainees() {
+const addTraineeSchema = z.object({
+  fullName: z.string().min(2, "Full name is required"),
+  email: z.string().email("Valid email required"),
+  phoneNumber: z.string().optional(),
+  employmentStatus: z.enum(["EMPLOYED", "UNEMPLOYED", "SEEKING"]),
+  companyName: z.string().optional(),
+  currentRole: z.string().optional(),
+});
+
+export default function Trainees() {
   const navigate = useNavigate();
-  const [trainees, setTrainees] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [search, setSearch] = useState("");
-  const [district, setDistrict] = useState("All Districts");
-  const [page, setPage] = useState(1);
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [refreshKey, setRefreshKey] = useState(0);
+  const queryClient = useQueryClient();
+  const { role } = useAuth();
+  const { addToast } = useToast();
+  const [searchParams, setSearchParams] = useSearchParams();
 
-  useEffect(() => {
-    let isMounted = true;
+  const searchFilter = searchParams.get("search") || "";
+  const statusFilter = searchParams.get("status") || "ALL";
+  const consentFilter = searchParams.get("consent") || "ALL";
+  const currentPage = Math.max(1, Number(searchParams.get("page")) || 1);
 
-    async function loadTrainees() {
-      try {
-        setLoading(true);
-        setError(null);
-        const data = await fetchApi("/trainees");
-        if (isMounted) {
-          setTrainees(data);
-        }
-      } catch (err) {
-        if (isMounted) {
-          setError(err.message || "An error occurred while fetching trainees.");
-        }
-      } finally {
-        if (isMounted) {
-          setLoading(false);
-        }
+  const [sorting, setSorting] = useState([]);
+  const [addModalOpen, setAddModalOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [addStatus, setAddStatus] = useState("SEEKING");
+
+  const updateParams = (updates, resetPage = true) => {
+    const next = new URLSearchParams(searchParams);
+    Object.entries(updates).forEach(([k, v]) => {
+      if (!v || v === "ALL" || (k === "page" && Number(v) <= 1)) {
+        next.delete(k);
+      } else {
+        next.set(k, String(v));
       }
+    });
+    if (resetPage && !("page" in updates)) {
+      next.delete("page");
     }
+    setSearchParams(next, { replace: true });
+  };
 
-    loadTrainees();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [refreshKey]);
-
-  function handleTraineeCreated(created) {
-    setShowAddModal(false);
-    setPage(1);
-    if (created?.id) {
-      navigate(`/trainees/${created.id}`);
-    } else {
-      setRefreshKey((key) => key + 1);
-    }
-  }
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="bg-red-50 border border-red-200 rounded-2xl p-6 text-red-700">
-        <p className="font-semibold">Failed to load data</p>
-        <p className="text-sm mt-1">{error}</p>
-      </div>
-    );
-  }
-
-  const uniqueDistricts = Array.from(
-    new Set(trainees.map((item) => item.district).filter(Boolean))
-  ).sort();
-
-  const districts = ["All Districts", ...uniqueDistricts];
-
-  const filteredTrainees = trainees.filter((trainee) => {
-    const searchValue = search.toLowerCase().trim();
-
-    const matchesSearch =
-      (trainee.name || "").toLowerCase().includes(searchValue) ||
-      (trainee.qualification || "").toLowerCase().includes(searchValue);
-
-    const matchesDistrict =
-      district === "All Districts" || trainee.district === district;
-
-    return matchesSearch && matchesDistrict;
+  const {
+    data: trainees = [],
+    isLoading,
+    isError,
+    error,
+    refetch,
+  } = useQuery({
+    queryKey: ["trainees"],
+    queryFn: ({ signal }) => traineeApi.getAll(signal),
+    staleTime: 60000,
   });
 
-  // Client-side pagination: backend GET /trainees returns the full list
-  // (no server pagination), so slice here. Reset to page 1 on filter change.
-  const { items: pagedTrainees, totalPages } = paginate(filteredTrainees, page, PAGE_SIZE);
+  const deleteMutation = useMutation({
+    mutationFn: (id) => adminApi.removeTrainee(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["trainees"] });
+      queryClient.invalidateQueries({ queryKey: ["adminDashboard"] });
+      addToast({ title: "Trainee Removed", description: "The trainee record has been deleted." });
+      setDeleteTarget(null);
+    },
+    onError: (err) => {
+      addToast({ title: "Deletion Failed", description: err.message, variant: "danger" });
+    },
+  });
 
-  const consentGranted = trainees.filter(
-    (trainee) => trainee.consentStatus ?? trainee.consent
-  ).length;
-  const consentNotGranted = trainees.length - consentGranted;
+  const emailStopMutation = useMutation({
+    mutationFn: ({ id, stop }) => adminApi.stopEmails(id, stop),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["trainees"] });
+      addToast({ title: "Email Setting Updated", description: "Quarterly email setting updated." });
+    },
+    onError: (err) => {
+      addToast({ title: "Update Failed", description: err.message, variant: "danger" });
+    },
+  });
+
+  const {
+    register,
+    handleSubmit,
+    reset,
+    formState: { errors: formErrors, isSubmitting },
+    setValue: setAddValue,
+  } = useForm({
+    resolver: zodResolver(addTraineeSchema),
+    defaultValues: {
+      fullName: "",
+      email: "",
+      phoneNumber: "",
+      employmentStatus: "SEEKING",
+      companyName: "",
+      currentRole: "",
+    },
+  });
+
+  const onAddTrainee = async (formData) => {
+    try {
+      const fn = role === "ADMIN" ? adminApi.addTrainee : traineeApi.create;
+      await fn({
+        ...formData,
+        consentGiven: true,
+        allowEmails: true,
+      });
+      queryClient.invalidateQueries({ queryKey: ["trainees"] });
+      queryClient.invalidateQueries({ queryKey: ["adminDashboard"] });
+      addToast({ title: "Trainee Added", description: `${formData.fullName} registered.` });
+      reset();
+      setAddStatus("SEEKING");
+      setAddModalOpen(false);
+    } catch (err) {
+      addToast({ title: "Creation Failed", description: err.message, variant: "danger" });
+    }
+  };
+
+  const filteredData = useMemo(() => {
+    const q = searchFilter.trim().toLowerCase();
+    return trainees.filter((item) => {
+      const matchSearch =
+        !q ||
+        item.fullName?.toLowerCase().includes(q) ||
+        item.email?.toLowerCase().includes(q) ||
+        item.currentRole?.toLowerCase().includes(q) ||
+        item.companyName?.toLowerCase().includes(q) ||
+        String(item.id) === q;
+
+      const matchStatus = statusFilter === "ALL" || item.employmentStatus === statusFilter;
+
+      const matchConsent =
+        consentFilter === "ALL" ||
+        (consentFilter === "true" && Boolean(item.consentGiven)) ||
+        (consentFilter === "false" && !item.consentGiven);
+
+      return matchSearch && matchStatus && matchConsent;
+    });
+  }, [trainees, searchFilter, statusFilter, consentFilter]);
+
+  const columns = useMemo(
+    () => [
+      {
+        accessorKey: "fullName",
+        header: "Trainee",
+        cell: ({ row }) => (
+          <div className="flex items-center gap-3 min-w-[200px]">
+            <Avatar fallback={row.original.fullName} size="sm" />
+            <div className="min-w-0">
+              <p className="font-medium text-sm text-gray-900 dark:text-gray-50 truncate">{row.original.fullName}</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{row.original.email}</p>
+            </div>
+          </div>
+        ),
+      },
+      {
+        accessorKey: "employmentStatus",
+        header: "Status",
+        cell: ({ getValue }) => {
+          const status = getValue();
+          const configs = {
+            EMPLOYED: { label: "Employed", variant: "emerald" },
+            UNEMPLOYED: { label: "Unemployed", variant: "rose" },
+            SEEKING: { label: "Seeking", variant: "amber" },
+          };
+          const conf = configs[status] || { label: status || "Unknown", variant: "neutral" };
+          return <Badge variant={conf.variant}>{conf.label}</Badge>;
+        },
+      },
+      {
+        accessorKey: "currentRole",
+        header: "Role & Company",
+        cell: ({ row }) => (
+          <div className="text-xs">
+            <p className="font-medium text-gray-900 dark:text-gray-100">{row.original.currentRole || "—"}</p>
+            <p className="text-gray-500 dark:text-gray-400">{row.original.companyName || "No employer"}</p>
+          </div>
+        ),
+      },
+      {
+        accessorKey: "skills",
+        header: "Skills",
+        enableSorting: false,
+        cell: ({ row }) => {
+          const skills = row.original.skills || [];
+          return (
+            <div className="flex flex-wrap gap-1 max-w-[220px]">
+              {skills.slice(0, 3).map((s) => (
+                <Badge key={s} variant="neutral">
+                  {s}
+                </Badge>
+              ))}
+              {skills.length > 3 && (
+                <Badge variant="outline">+{skills.length - 3}</Badge>
+              )}
+              {skills.length === 0 && <span className="text-xs text-gray-400 dark:text-gray-500">None</span>}
+            </div>
+          );
+        },
+      },
+      {
+        accessorKey: "consentGiven",
+        header: "Consent",
+        cell: ({ getValue }) =>
+          getValue() ? (
+            <Badge variant="emerald">Granted</Badge>
+          ) : (
+            <Badge variant="outline">Pending</Badge>
+          ),
+      },
+      ...(role === "ADMIN"
+        ? [
+            {
+              id: "allowEmails",
+              header: "Emails",
+              enableSorting: false,
+              cell: ({ row }) => (
+                <Switch
+                  aria-label={`Toggle emails for ${row.original.fullName}`}
+                  checked={!row.original.adminStoppedEmail}
+                  onCheckedChange={(checked) =>
+                    emailStopMutation.mutate({ id: row.original.id, stop: !checked })
+                  }
+                />
+              ),
+            },
+          ]
+        : []),
+      {
+        id: "actions",
+        header: "Actions",
+        enableSorting: false,
+        cell: ({ row }) => (
+          <div className="flex items-center justify-end gap-1.5">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => navigate(`/trainees/${row.original.id}`)}
+            >
+              <Eye size={13} /> Profile
+            </Button>
+            {role === "ADMIN" && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="text-red-700 hover:bg-red-50 hover:text-red-800 dark:text-red-400 dark:hover:bg-red-950/60 dark:hover:text-red-300"
+                onClick={() => setDeleteTarget(row.original)}
+                aria-label={`Remove ${row.original.fullName}`}
+              >
+                <Trash2 size={14} />
+              </Button>
+            )}
+          </div>
+        ),
+      },
+    ],
+    [role, navigate, emailStopMutation]
+  );
+
+  const pageSize = 8;
+  const pageCount = Math.max(1, Math.ceil(filteredData.length / pageSize));
+  const safePageIndex = Math.min(currentPage - 1, pageCount - 1);
+
+  const table = useReactTable({
+    data: filteredData,
+    columns,
+    state: {
+      sorting,
+      pagination: { pageIndex: safePageIndex, pageSize },
+    },
+    onSortingChange: setSorting,
+    onPaginationChange: (updater) => {
+      const next =
+        typeof updater === "function" ? updater({ pageIndex: safePageIndex, pageSize }) : updater;
+      updateParams({ page: next.pageIndex + 1 }, false);
+    },
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+    getPaginationRowModel: getPaginationRowModel(),
+  });
+
+  const hasFilters = searchFilter !== "" || statusFilter !== "ALL" || consentFilter !== "ALL";
 
   return (
-    <div className="space-y-8">
-      {/* Heading */}
-      <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
+    <div className="space-y-5">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <p className="text-sm font-medium text-blue-600">
-            Trainee Management
-          </p>
-
-          <h1 className="text-3xl font-bold text-slate-900 mt-1">
-            Trainees
-          </h1>
-
-          <p className="text-slate-500 mt-2">
-            View and track registered trainees and their basic information.
+          <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-50">Trainees Directory</h1>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+            Search, filter, sort, and inspect trainee outcomes across {trainees.length} records.
           </p>
         </div>
 
-        <button
-          onClick={() => setShowAddModal(true)}
-          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 transition shrink-0"
-        >
-          <Plus size={17} />
-          Add Trainee
-        </button>
+        {role === "ADMIN" && (
+          <Button variant="primary" size="md" onClick={() => setAddModalOpen(true)}>
+            <Plus size={15} /> Add Trainee
+          </Button>
+        )}
       </div>
 
-      {/* Summary */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-white border border-blue-100 rounded-2xl p-5 shadow-sm">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-slate-500">
-                Total Registered
-              </p>
-
-              <p className="text-3xl font-bold text-slate-900 mt-2">
-                {trainees.length}
-              </p>
-            </div>
-
-            <div className="w-11 h-11 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
-              <Users size={22} />
-            </div>
+      {/* Filters Toolbar */}
+      <Card>
+        <div className="p-3.5 flex flex-col md:flex-row items-stretch md:items-center gap-3">
+          <div className="relative flex-1">
+            <Input
+              value={searchFilter}
+              onChange={(e) => updateParams({ search: e.target.value })}
+              placeholder="Search by name, email, company, role, or ID..."
+              className="pl-9"
+            />
+            <Search size={15} className="absolute left-3 top-2.5 text-gray-400 dark:text-gray-500" />
           </div>
-        </div>
 
-        <div className="bg-white border border-blue-100 rounded-2xl p-5 shadow-sm">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-slate-500">
-                Tracking Consent Given
-              </p>
-
-              <p className="text-3xl font-bold text-slate-900 mt-2">
-                {consentGranted}
-              </p>
-            </div>
-
-            <div className="w-11 h-11 rounded-xl bg-green-50 text-green-600 flex items-center justify-center">
-              <CheckCircle2 size={22} />
-            </div>
+          <div className="w-full md:w-44">
+            <Select
+              value={statusFilter}
+              onValueChange={(val) => updateParams({ status: val })}
+              options={[
+                { value: "ALL", label: "All Statuses" },
+                { value: "EMPLOYED", label: "Employed" },
+                { value: "SEEKING", label: "Seeking" },
+                { value: "UNEMPLOYED", label: "Unemployed" },
+              ]}
+            />
           </div>
-        </div>
 
-        <div className="bg-white border border-blue-100 rounded-2xl p-5 shadow-sm">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-slate-500">
-                Tracking Consent Not Given
-              </p>
-
-              <p className="text-3xl font-bold text-slate-900 mt-2">
-                {consentNotGranted}
-              </p>
-            </div>
-
-            <div className="w-11 h-11 rounded-xl bg-red-50 text-red-600 flex items-center justify-center">
-              <XCircle size={22} />
-            </div>
+          <div className="w-full md:w-44">
+            <Select
+              value={consentFilter}
+              onValueChange={(val) => updateParams({ consent: val })}
+              options={[
+                { value: "ALL", label: "All Consent" },
+                { value: "true", label: "Consent Granted" },
+                { value: "false", label: "Consent Pending" },
+              ]}
+            />
           </div>
-        </div>
-      </div>
 
-      {/* Table */}
-      <div className="bg-white border border-blue-100 rounded-2xl shadow-sm overflow-hidden">
-        {/* Filters */}
-        <div className="p-6 border-b border-blue-100">
-          <div className="flex flex-col md:flex-row gap-4">
-            {/* Search */}
-            <div className="relative flex-1">
-              <Search
-                size={18}
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
-              />
-
-              <input
-                type="text"
-                value={search}
-                onChange={(event) => {
-                  setSearch(event.target.value);
-                  setPage(1);
-                }}
-                placeholder="Search by name or qualification..."
-                className="w-full pl-10 pr-4 py-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-400"
-              />
-            </div>
-
-            {/* District */}
-            <select
-              value={district}
-              onChange={(event) => {
-                setDistrict(event.target.value);
-                setPage(1);
-              }}
-              className="md:w-56 px-4 py-2.5 border border-slate-200 rounded-xl text-sm text-slate-600 outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-400 bg-white"
+          {hasFilters && (
+            <Button
+              variant="outline"
+              size="md"
+              onClick={() => updateParams({ search: "", status: "ALL", consent: "ALL" })}
             >
-              {districts.map((item) => (
-                <option key={item} value={item}>
-                  {item}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Result count */}
-          <div className="mt-4 text-sm text-slate-500">
-            Showing{" "}
-            <span className="font-semibold text-slate-800">
-              {filteredTrainees.length}
-            </span>{" "}
-            of{" "}
-            <span className="font-semibold text-slate-800">
-              {trainees.length}
-            </span>{" "}
-            displayed trainees
-          </div>
+              <X size={14} /> Clear
+            </Button>
+          )}
         </div>
+      </Card>
 
-        {/* Table */}
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-slate-50 border-b border-slate-200">
-              <tr>
-                <th className="text-left px-6 py-4 font-semibold text-slate-600">
-                  Trainee
-                </th>
-
-                <th className="text-left px-6 py-4 font-semibold text-slate-600">
-                  Qualification
-                </th>
-
-                <th className="text-left px-6 py-4 font-semibold text-slate-600">
-                  District
-                </th>
-
-                <th className="text-left px-6 py-4 font-semibold text-slate-600">
-                  Tracking Consent
-                </th>
-
-                <th className="text-left px-6 py-4 font-semibold text-slate-600">
-                  Action
-                </th>
-              </tr>
-            </thead>
-
-            <tbody>
-              {pagedTrainees.length > 0 ? (
-                pagedTrainees.map((trainee) => (
-                  <tr
-                    key={trainee.id}
-                    className="border-b border-slate-100 last:border-0 hover:bg-blue-50/40 transition"
-                  >
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 text-white flex items-center justify-center font-semibold">
-                          {trainee.name ? trainee.name.charAt(0) : "T"}
-                        </div>
-
-                        <span className="font-semibold text-slate-800">
-                          {trainee.name}
-                        </span>
-                      </div>
-                    </td>
-
-                    <td className="px-6 py-4 text-slate-600">
-                      {trainee.qualification}
-                    </td>
-
-                    <td className="px-6 py-4 text-slate-600">
-                      {trainee.district || "—"}
-                    </td>
-
-                    <td className="px-6 py-4">
-                      {(trainee.consentStatus ?? trainee.consent) ? (
-                        <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-green-50 text-green-700 font-medium">
-                          <CheckCircle2 size={14} />
-                          Granted
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-red-50 text-red-700 font-medium">
-                          <XCircle size={14} />
-                          Not granted
-                        </span>
-                      )}
-                    </td>
-
-                    <td className="px-6 py-4">
-                      <button
-                        onClick={() => navigate(`/trainees/${trainee.id}`)}
-                        className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 font-medium transition"
-                      >
-                        <Eye size={16} />
-                        View
-                      </button>
-                    </td>
+      {/* States / Table */}
+      {isLoading ? (
+        <LoadingState label="Loading trainee directory..." rows={5} />
+      ) : isError ? (
+        <ErrorState title="Failed to load trainees" error={error} onRetry={refetch} />
+      ) : filteredData.length === 0 ? (
+        <EmptyState
+          icon={Users}
+          title="No matching trainees"
+          description="Try clearing or adjusting your search query, status filter, or consent filter."
+          action={
+            hasFilters && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => updateParams({ search: "", status: "ALL", consent: "ALL" })}
+              >
+                Reset Filters
+              </Button>
+            )
+          }
+        />
+      ) : (
+        <Card className="overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                {table.getHeaderGroups().map((headerGroup) => (
+                  <tr key={headerGroup.id} className="bg-gray-50 border-b border-gray-200 dark:bg-gray-950/70 dark:border-gray-800">
+                    {headerGroup.headers.map((header) => {
+                      const canSort = header.column.getCanSort();
+                      const sorted = header.column.getIsSorted();
+                      return (
+                        <th
+                          key={header.id}
+                          className={`px-4 py-3 text-xs font-medium text-gray-600 dark:text-gray-400 whitespace-nowrap ${
+                            header.id === "actions" ? "text-right" : ""
+                          }`}
+                        >
+                          {canSort ? (
+                            <button
+                              type="button"
+                              onClick={header.column.getToggleSortingHandler()}
+                              className="inline-flex items-center gap-1 hover:text-gray-900 dark:hover:text-gray-100 cursor-pointer"
+                            >
+                              {flexRender(header.column.columnDef.header, header.getContext())}
+                              {sorted === "asc" ? (
+                                <ArrowUp size={12} />
+                              ) : sorted === "desc" ? (
+                                <ArrowDown size={12} />
+                              ) : (
+                                <ArrowUpDown size={12} className="text-gray-400 dark:text-gray-500" />
+                              )}
+                            </button>
+                          ) : (
+                            flexRender(header.column.columnDef.header, header.getContext())
+                          )}
+                        </th>
+                      );
+                    })}
                   </tr>
-                ))
-              ) : (
-                <tr>
-                  <td
-                    colSpan="5"
-                    className="px-6 py-12 text-center text-slate-500"
-                  >
-                    No trainees found matching your search or district.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-        <Pagination
-          page={page}
-          totalPages={totalPages}
-          total={filteredTrainees.length}
-          pageSize={PAGE_SIZE}
-          onPageChange={setPage}
-        />
-      </div>
+                ))}
+              </thead>
+              <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
+                {table.getRowModel().rows.map((row) => (
+                  <tr key={row.id} className="hover:bg-gray-50/80 dark:hover:bg-gray-800/50">
+                    {row.getVisibleCells().map((cell) => (
+                      <td key={cell.id} className="px-4 py-3 text-sm align-middle">
+                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
 
-      {showAddModal && (
-        <AddTraineeModal
-          onClose={() => setShowAddModal(false)}
-          onCreated={handleTraineeCreated}
-        />
+          <div className="px-4 py-3 bg-gray-50 border-t border-gray-200 dark:bg-gray-950/70 dark:border-gray-800 flex items-center justify-between text-xs text-gray-600 dark:text-gray-400">
+            <span>
+              Page {safePageIndex + 1} of {pageCount} ({filteredData.length} trainees)
+            </span>
+            <div className="flex items-center gap-1.5">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={!table.getCanPreviousPage()}
+                onClick={() => table.previousPage()}
+              >
+                <ChevronLeft size={14} /> Prev
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={!table.getCanNextPage()}
+                onClick={() => table.nextPage()}
+              >
+                Next <ChevronRight size={14} />
+              </Button>
+            </div>
+          </div>
+        </Card>
       )}
+
+      {/* Add Trainee Dialog */}
+      <Dialog open={addModalOpen} onOpenChange={setAddModalOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add New Trainee</DialogTitle>
+            <DialogDescription>
+              Create a new trainee record in the SkillTrack directory.
+            </DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={handleSubmit(onAddTrainee)} className="space-y-3.5">
+            <Field label="Full Name" required error={formErrors.fullName?.message} id="add-name">
+              <Input
+                id="add-name"
+                {...register("fullName")}
+                placeholder="e.g. Aarav Sharma"
+                hasError={Boolean(formErrors.fullName)}
+              />
+            </Field>
+
+            <Field label="Email Address" required error={formErrors.email?.message} id="add-email">
+              <Input
+                id="add-email"
+                type="email"
+                {...register("email")}
+                placeholder="e.g. aarav@example.com"
+                hasError={Boolean(formErrors.email)}
+              />
+            </Field>
+
+            <Field label="Phone Number" id="add-phone">
+              <Input id="add-phone" {...register("phoneNumber")} placeholder="+91 98765 43210" />
+            </Field>
+
+            <Field label="Employment Status" required>
+              <Select
+                value={addStatus}
+                onValueChange={(val) => {
+                  setAddStatus(val);
+                  setAddValue("employmentStatus", val);
+                }}
+                options={[
+                  { value: "SEEKING", label: "Seeking Employment" },
+                  { value: "EMPLOYED", label: "Employed" },
+                  { value: "UNEMPLOYED", label: "Unemployed" },
+                ]}
+              />
+            </Field>
+
+            {addStatus === "EMPLOYED" && (
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Company Name" id="add-company">
+                  <Input id="add-company" {...register("companyName")} placeholder="e.g. TCS" />
+                </Field>
+                <Field label="Current Role" id="add-role">
+                  <Input id="add-role" {...register("currentRole")} placeholder="e.g. Developer" />
+                </Field>
+              </div>
+            )}
+
+            <DialogFooter>
+              <DialogClose render={<Button variant="outline" size="sm">Cancel</Button>} />
+              <Button type="submit" variant="primary" size="sm" loading={isSubmitting}>
+                Create Trainee
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation AlertDialog */}
+      <AlertDialog
+        open={Boolean(deleteTarget)}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(null);
+        }}
+      >
+        <AlertDialogContent variant="danger">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove Trainee Record?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently remove <strong>{deleteTarget?.fullName}</strong> from the
+              registry. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogClose render={<Button variant="outline" size="sm">Cancel</Button>} />
+            <Button
+              variant="danger"
+              size="sm"
+              loading={deleteMutation.isPending}
+              onClick={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
+            >
+              Remove Trainee
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
-
-export default Trainees;

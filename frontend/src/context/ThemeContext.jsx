@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { Classes } from "@blueprintjs/core";
 import { ThemeContext } from "./theme-context";
 
 const THEME_STORAGE_KEY = "skilltrack_theme";
@@ -24,10 +25,10 @@ export function ThemeProvider({ children }) {
   useEffect(() => {
     const root = document.documentElement;
     if (theme === "dark") {
-      root.classList.add("dark");
+      root.classList.add("dark", Classes.DARK);
       root.style.colorScheme = "dark";
     } else {
-      root.classList.remove("dark");
+      root.classList.remove("dark", Classes.DARK);
       root.style.colorScheme = "light";
     }
   }, [theme]);

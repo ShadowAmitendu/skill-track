@@ -15,11 +15,13 @@ import {
   ArrowRight,
   Plus,
 } from "lucide-react";
-import { Card, CardHeader, CardTitle, CardContent } from "../ui/Card";
+import { ButtonGroup, EntityTitle, H2 } from "@blueprintjs/core";
+import { Card, Section, SectionCard, CardList } from "../ui/Card";
 import { Badge } from "../ui/Badge";
 import { Button } from "../ui/Button";
 import { Progress } from "../ui/Progress";
 import { LoadingState, ErrorState } from "../ui/QueryState";
+import { getEmploymentMeta } from "../../utils/domain";
 
 export function TraineeDashboardBoard() {
   const { user } = useAuth();
@@ -120,253 +122,190 @@ export function TraineeDashboardBoard() {
   const skills = profile.skills || [];
   const certifications = profile.certifications || [];
 
-  const statusBadge =
-    profile.employmentStatus === "EMPLOYED"
-      ? { label: "Employed", variant: "emerald" }
-      : profile.employmentStatus === "UNEMPLOYED"
-      ? { label: "Unemployed", variant: "rose" }
-      : { label: "Seeking", variant: "amber" };
+  const statusBadge = getEmploymentMeta(profile.employmentStatus);
 
   return (
     <div className="space-y-5">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-50">
-            Trainee Dashboard
-          </h1>
-          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+          <H2 className="!mb-0">Trainee Dashboard</H2>
+          <p className="bp6-text-muted text-xs mt-1">
             Welcome back, {profile.fullName}. Track courses, earned skills, and career outcomes.
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
+        <ButtonGroup>
           <Link to="/me">
-            <Button variant="outline" size="sm">
-              <UserCheck size={14} /> Edit My Profile
+            <Button variant="outline" icon={<UserCheck size={14} />}>
+              Edit My Profile
             </Button>
           </Link>
           <Link to="/courses">
-            <Button variant="primary" size="sm">
-              <GraduationCap size={14} /> Explore Courses
+            <Button variant="primary" icon={<GraduationCap size={14} />}>
+              Explore Courses
             </Button>
           </Link>
-        </div>
+        </ButtonGroup>
       </div>
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Link to="/me?tab=courses" className="group block">
-          <Card className="group-hover:border-gray-400 dark:group-hover:border-gray-600 h-full">
-            <CardContent className="p-5 flex items-center justify-between gap-3">
-              <div>
-                <p className="text-xs text-gray-500 dark:text-gray-400 font-medium">
-                  Active Enrollments
-                </p>
-                <p className="text-2xl font-semibold text-gray-900 dark:text-gray-50 mt-1 tabular-nums">
-                  {enrolledCourses.length}
-                </p>
-                <span className="text-xs text-gray-600 dark:text-gray-400 group-hover:underline mt-1 inline-block">
-                  Manage enrollments &rarr;
-                </span>
-              </div>
-              <div className="w-10 h-10 rounded-md bg-gray-100 border border-gray-200 text-gray-800 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-200 flex items-center justify-center shrink-0">
-                <GraduationCap size={18} />
-              </div>
-            </CardContent>
+        <Link to="/me?tab=courses" className="block">
+          <Card interactive className="h-full">
+            <EntityTitle
+              icon={<GraduationCap size={18} className="bp6-text-muted" />}
+              title="Active Enrollments"
+              subtitle="Manage enrollments →"
+            />
+            <H2 className="!mb-0 !mt-3 tabular-nums">{enrolledCourses.length}</H2>
           </Card>
         </Link>
 
-        <Link to="/me?tab=courses" className="group block">
-          <Card className="group-hover:border-gray-400 dark:group-hover:border-gray-600 h-full">
-            <CardContent className="p-5 space-y-2.5">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 font-medium">
-                    Courses Completed
-                  </p>
-                  <p className="text-2xl font-semibold text-gray-900 dark:text-gray-50 mt-1 tabular-nums">
-                    {completedCourses.length}
-                  </p>
-                </div>
-                <div className="w-10 h-10 rounded-md bg-gray-100 border border-gray-200 text-gray-800 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-200 flex items-center justify-center shrink-0">
-                  <CheckCircle2 size={18} />
-                </div>
-              </div>
-              <Progress value={completionPct} />
-              <p className="text-xs text-gray-500 dark:text-gray-400">
-                {completionPct}% of enrolled journey complete
-              </p>
-            </CardContent>
+        <Link to="/me?tab=courses" className="block">
+          <Card interactive className="h-full">
+            <EntityTitle
+              icon={<CheckCircle2 size={18} className="bp6-text-muted" />}
+              title="Courses Completed"
+              subtitle={`${completionPct}% of enrolled journey`}
+            />
+            <div className="mt-3 space-y-2">
+              <H2 className="!mb-0 tabular-nums">{completedCourses.length}</H2>
+              <Progress value={completionPct} variant="success" />
+            </div>
           </Card>
         </Link>
 
-        <Link to="/me?tab=skills" className="group block">
-          <Card className="group-hover:border-gray-400 dark:group-hover:border-gray-600 h-full">
-            <CardContent className="p-5 flex items-center justify-between gap-3">
-              <div>
-                <p className="text-xs text-gray-500 dark:text-gray-400 font-medium">
-                  Earned Skills
-                </p>
-                <p className="text-2xl font-semibold text-gray-900 dark:text-gray-50 mt-1 tabular-nums">
-                  {skills.length}
-                </p>
-                <span className="text-xs text-gray-600 dark:text-gray-400 group-hover:underline mt-1 inline-block">
-                  {certifications.length} certifications &rarr;
-                </span>
-              </div>
-              <div className="w-10 h-10 rounded-md bg-gray-100 border border-gray-200 text-gray-800 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-200 flex items-center justify-center shrink-0">
-                <Award size={18} />
-              </div>
-            </CardContent>
+        <Link to="/me?tab=skills" className="block">
+          <Card interactive className="h-full">
+            <EntityTitle
+              icon={<Award size={18} className="bp6-text-muted" />}
+              title="Earned Skills"
+              subtitle={`${certifications.length} certifications →`}
+            />
+            <H2 className="!mb-0 !mt-3 tabular-nums">{skills.length}</H2>
           </Card>
         </Link>
 
-        <Link to="/me?tab=employment" className="group block">
-          <Card className="group-hover:border-gray-400 dark:group-hover:border-gray-600 h-full">
-            <CardContent className="p-5 flex items-center justify-between gap-3">
-              <div className="min-w-0">
-                <p className="text-xs text-gray-500 dark:text-gray-400 font-medium">
-                  Employment Status
-                </p>
-                <div className="mt-1.5">
-                  <Badge variant={statusBadge.variant}>{statusBadge.label}</Badge>
-                </div>
-                <span className="text-xs text-gray-600 dark:text-gray-400 group-hover:underline mt-2 inline-block truncate max-w-full">
-                  {profile.currentRole || profile.companyName || "Update details"} &rarr;
-                </span>
-              </div>
-              <div className="w-10 h-10 rounded-md bg-gray-100 border border-gray-200 text-gray-800 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-200 flex items-center justify-center shrink-0">
-                <BriefcaseBusiness size={18} />
-              </div>
-            </CardContent>
+        <Link to="/my-employment" className="block">
+          <Card interactive className="h-full">
+            <EntityTitle
+              icon={<BriefcaseBusiness size={18} className="bp6-text-muted" />}
+              title="Employment Status"
+              subtitle={profile.currentRole || profile.companyName || "Update details →"}
+            />
+            <div className="mt-3">
+              <Badge variant={statusBadge.variant}>{statusBadge.label}</Badge>
+            </div>
           </Card>
         </Link>
       </div>
 
       {/* Main Two-Column Board */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-        {/* Learning & Career Summary */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <GraduationCap size={16} /> My Learning & Career Snapshot
-            </CardTitle>
-            <Link
-              to="/me?tab=courses"
-              className="text-xs font-medium text-gray-700 hover:text-gray-900 dark:text-gray-300 dark:hover:text-gray-50 inline-flex items-center gap-1"
-            >
-              Open Full Record <ArrowRight size={13} />
+        <Section
+          title="My Learning & Career Snapshot"
+          icon={<GraduationCap size={16} />}
+          rightElement={
+            <Link to="/me?tab=courses">
+              <Button variant="minimal" size="sm" endIcon={<ArrowRight size={13} />}>
+                Open Full Record
+              </Button>
             </Link>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div>
-              <p className="text-[11px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">
-                In Progress ({enrolledCourses.length})
+          }
+        >
+          <SectionCard>
+            <p className="text-[11px] font-semibold bp6-text-muted uppercase tracking-wider mb-2.5">
+              In Progress ({enrolledCourses.length})
+            </p>
+            {enrolledCourses.length > 0 ? (
+              <CardList bordered>
+                {enrolledCourses.map((title) => (
+                  <Card key={title} compact className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-medium truncate">{title}</span>
+                    <Badge variant="primary">In Progress</Badge>
+                  </Card>
+                ))}
+              </CardList>
+            ) : (
+              <p className="text-xs bp6-text-muted">
+                No active enrollments. Pick a suggested course on the right to begin.
               </p>
-              {enrolledCourses.length > 0 ? (
-                <ul className="space-y-2">
-                  {enrolledCourses.map((title) => (
-                    <li
-                      key={title}
-                      className="p-2.5 bg-gray-50 border border-gray-200 rounded-md flex items-center justify-between gap-2 text-xs dark:bg-gray-950/70 dark:border-gray-800"
-                    >
-                      <span className="font-medium text-gray-900 dark:text-gray-100 truncate">
-                        {title}
-                      </span>
-                      <Badge variant="neutral">In Progress</Badge>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-xs text-gray-500 dark:text-gray-400">
-                  No active enrollments. Pick a suggested course on the right to begin.
-                </p>
-              )}
-            </div>
+            )}
+          </SectionCard>
 
-            <div className="pt-3 border-t border-gray-200 dark:border-gray-800">
-              <p className="text-[11px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">
-                Verified Skills ({skills.length})
-              </p>
-              {skills.length > 0 ? (
-                <div className="flex flex-wrap gap-1.5">
-                  {skills.map((skill) => (
-                    <Badge key={skill} variant="outline">
-                      {skill}
-                    </Badge>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-xs text-gray-500 dark:text-gray-400">
-                  Complete enrolled courses to earn skills automatically.
-                </p>
-              )}
-            </div>
-
-            <div className="pt-3 border-t border-gray-200 dark:border-gray-800 flex items-center justify-between gap-3 text-xs">
-              <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
-                <ShieldCheck size={14} className="shrink-0" />
-                <span>
-                  Consent:{" "}
-                  <strong className="font-medium text-gray-900 dark:text-gray-100">
-                    {profile.consentGiven ? "Granted" : "Pending"}
-                  </strong>
-                </span>
+          <SectionCard>
+            <p className="text-[11px] font-semibold bp6-text-muted uppercase tracking-wider mb-2.5">
+              Verified Skills ({skills.length})
+            </p>
+            {skills.length > 0 ? (
+              <div className="flex flex-wrap gap-1.5">
+                {skills.map((skill) => (
+                  <Badge key={skill} variant="outline">
+                    {skill}
+                  </Badge>
+                ))}
               </div>
-              <Link
-                to="/me?tab=employment"
-                className="font-medium text-gray-900 underline hover:text-gray-700 dark:text-gray-100 dark:hover:text-gray-300"
-              >
-                Update Employment &rarr;
-              </Link>
-            </div>
-          </CardContent>
-        </Card>
+            ) : (
+              <p className="text-xs bp6-text-muted">
+                Complete enrolled courses to earn skills automatically.
+              </p>
+            )}
+          </SectionCard>
 
-        {/* Client-side Course Recommendations */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Sparkles size={16} /> Suggested Courses for You
-            </CardTitle>
-            <Link
-              to="/courses"
-              className="text-xs font-medium text-gray-700 hover:text-gray-900 dark:text-gray-300 dark:hover:text-gray-50 inline-flex items-center gap-1"
-            >
-              Browse Catalog <ArrowRight size={13} />
+          <SectionCard compact className="flex items-center justify-between gap-3 text-xs">
+            <div className="flex items-center gap-2 bp6-text-muted">
+              <ShieldCheck size={14} className="shrink-0" />
+              <span>
+                Consent: <strong className="font-medium">{profile.consentGiven ? "Granted" : "Pending"}</strong>
+              </span>
+            </div>
+            <Link to="/my-employment">
+              <Button variant="minimal" size="sm" endIcon={<ArrowRight size={12} />}>
+                Update Employment
+              </Button>
             </Link>
-          </CardHeader>
-          <CardContent>
-            {recommendedCourses.length === 0 ? (
-              <p className="text-xs text-gray-500 dark:text-gray-400 py-6 text-center">
+          </SectionCard>
+        </Section>
+
+        <Section
+          title="Suggested Courses for You"
+          icon={<Sparkles size={16} />}
+          rightElement={
+            <Link to="/courses">
+              <Button variant="minimal" size="sm" endIcon={<ArrowRight size={13} />}>
+                Browse Catalog
+              </Button>
+            </Link>
+          }
+        >
+          {recommendedCourses.length === 0 ? (
+            <SectionCard>
+              <p className="text-xs bp6-text-muted py-6 text-center">
                 You are already enrolled in or have completed all catalog courses.
               </p>
-            ) : (
-              <div className="space-y-3">
+            </SectionCard>
+          ) : (
+            <SectionCard padded={false}>
+              <CardList bordered={false}>
                 {recommendedCourses.map((course) => (
-                  <div
+                  <Card
                     key={course.id}
-                    className="p-3 bg-gray-50 border border-gray-200 rounded-md flex items-start justify-between gap-3 dark:bg-gray-950/70 dark:border-gray-800"
+                    compact
+                    className="flex items-start justify-between gap-3"
                   >
                     <div className="min-w-0 space-y-1.5">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <p className="text-sm font-medium text-gray-900 dark:text-gray-50">
-                          {course.title}
-                        </p>
+                        <span className="text-sm font-medium">{course.title}</span>
                         {course.newSkills.length > 0 && (
-                          <Badge variant="dark" className="text-[10px]">
-                            Suggested for you
-                          </Badge>
+                          <Badge variant="default">Suggested</Badge>
                         )}
                       </div>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">
-                        {course.providerName}
-                      </p>
+                      <div className="text-xs bp6-text-muted">{course.providerName}</div>
                       <div className="flex flex-wrap gap-1">
                         {(course.skillsTaught || []).map((skill) => (
                           <Badge
                             key={skill}
-                            variant={course.newSkills.includes(skill) ? "neutral" : "outline"}
+                            variant={course.newSkills.includes(skill) ? "secondary" : "outline"}
                           >
                             {skill}
                           </Badge>
@@ -377,18 +316,19 @@ export function TraineeDashboardBoard() {
                     <Button
                       variant="primary"
                       size="sm"
+                      icon={<Plus size={13} />}
                       className="shrink-0"
                       loading={enrollMutation.isPending}
                       onClick={() => enrollMutation.mutate(course.id)}
                     >
-                      <Plus size={13} /> Enroll
+                      Enroll
                     </Button>
-                  </div>
+                  </Card>
                 ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+              </CardList>
+            </SectionCard>
+          )}
+        </Section>
       </div>
     </div>
   );

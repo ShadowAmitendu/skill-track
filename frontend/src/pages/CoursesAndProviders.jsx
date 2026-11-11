@@ -9,7 +9,6 @@ import { useAuth } from "../context/useAuth";
 import { useToast } from "../components/ui/useToast";
 import {
   GraduationCap,
-  Search,
   Plus,
   Sparkles,
   Users,
@@ -22,7 +21,8 @@ import {
 } from "lucide-react";
 import { Button } from "../components/ui/Button";
 import { Badge } from "../components/ui/Badge";
-import { Card, CardHeader, CardTitle, CardContent, CardFooter } from "../components/ui/Card";
+import { ButtonGroup, Divider, H2, Intent } from "@blueprintjs/core";
+import { Card, Section, SectionCard } from "../components/ui/Card";
 import { Tabs, TabsList, TabsTab, TabsPanel } from "../components/ui/Tabs";
 import {
   Dialog,
@@ -42,7 +42,6 @@ import {
   AlertDialogFooter,
   AlertDialogClose,
 } from "../components/ui/AlertDialog";
-import { Tooltip } from "../components/ui/Tooltip";
 import {
   Accordion,
   AccordionItem,
@@ -54,10 +53,12 @@ import { Field, Input, Textarea } from "../components/ui/Field";
 import { Select } from "../components/ui/Select";
 import { Combobox } from "../components/ui/Combobox";
 import { LoadingState, ErrorState, EmptyState } from "../components/ui/QueryState";
+import { deriveCourseCategory } from "../utils/domain";
 
 const courseSchema = z.object({
   title: z.string().min(2, "Course title is required"),
   description: z.string().min(5, "Description is required"),
+  category: z.string().optional(),
   skillsTaught: z.string().min(1, "Enter at least one skill comma-separated"),
 });
 
@@ -74,13 +75,18 @@ export default function CoursesAndProviders() {
   const { addToast } = useToast();
   const [searchParams, setSearchParams] = useSearchParams();
 
+  const isAdmin = role === "ADMIN";
+  const isProvider = role === "COURSE_PROVIDER";
+  const myProviderId = user?.id || 1;
   const tabParam = searchParams.get("tab");
-  const activeTab = tabParam === "providers" ? "providers" : "courses";
+  const activeTab = isAdmin && tabParam === "providers" ? "providers" : "courses";
 
   const defaultSort = role === "TRAINEE" ? "recommended" : "default";
   const search = searchParams.get("q") || "";
   const selectedSkill = searchParams.get("skill") || "";
-  const selectedProvider = searchParams.get("provider") || "ALL";
+  const selectedCategory = searchParams.get("category") || "ALL";
+  const selectedProvider = isAdmin ? searchParams.get("provider") || "ALL" : "ALL";
+  const courseScope = isProvider ? searchParams.get("scope") || "all" : "all";
   const sortBy = searchParams.get("sort") || defaultSort;
   const providerSearch = searchParams.get("pSearch") || "";
 
@@ -90,6 +96,7 @@ export default function CoursesAndProviders() {
 
   const [providerModalOpen, setProviderModalOpen] = useState(false);
   const [editingProvider, setEditingProvider] = useState(null);
+  const [deleteProviderTarget, setDeleteProviderTarget] = useState(null);
 
   const [kickModalTarget, setKickModalTarget] = useState(null);
   const [kickReason, setKickReason] = useState("");
@@ -101,6 +108,8 @@ export default function CoursesAndProviders() {
       if (
         !val ||
         (key === "provider" && val === "ALL") ||
+        (key === "category" && val === "ALL") ||
+        (key === "scope" && val === "all") ||
         (key === "sort" && val === defaultSort)
       ) {
         next.delete(key);
@@ -112,6 +121,7 @@ export default function CoursesAndProviders() {
   };
 
   const handleTabChange = (nextTab) => {
+    if (!isAdmin && nextTab === "providers") return;
     const next = new URLSearchParams(searchParams);
     if (nextTab === "courses") next.delete("tab");
     else next.set("tab", nextTab);
@@ -139,6 +149,7 @@ export default function CoursesAndProviders() {
   } = useQuery({
     queryKey: ["providers"],
     queryFn: ({ signal }) => providerApi.getAll(signal),
+    enabled: isAdmin,
     staleTime: 60000,
   });
 
@@ -191,14 +202,27 @@ export default function CoursesAndProviders() {
     return Array.from(set).sort();
   }, [courses]);
 
+  const allCategories = useMemo(() => {
+    const set = new Set();
+    courses.forEach((c) => {
+      set.add(deriveCourseCategory(c.skillsTaught, c.category));
+    });
+    return Array.from(set).sort();
+  }, [courses]);
+
   const scoredCourses = useMemo(() => {
     const q = search.trim().toLowerCase();
     const filtered = courses.filter((course) => {
+      const courseCategory = deriveCourseCategory(course.skillsTaught, course.category);
+      const isOwnCourse = isProvider && Number(course.providerId) === Number(myProviderId);
+
       const matchSearch =
         !q ||
         course.title.toLowerCase().includes(q) ||
         course.description.toLowerCase().includes(q) ||
-        course.providerName?.toLowerCase().includes(q);
+        courseCategory.toLowerCase().includes(q) ||
+        (course.skillsTaught || []).some((s) => s.toLowerCase().includes(q)) ||
+        ((!isProvider || isOwnCourse) && course.providerName?.toLowerCase().includes(q));
 
       const matchSkill =
         !selectedSkill ||
@@ -206,13 +230,19 @@ export default function CoursesAndProviders() {
           (s) => s.toLowerCase() === selectedSkill.toLowerCase()
         );
 
-      const matchProvider =
-        selectedProvider === "ALL" || String(course.providerId) === selectedProvider;
+      const matchCategory = selectedCategory === "ALL" || courseCategory === selectedCategory;
 
-      return matchSearch && matchSkill && matchProvider;
+      const matchProvider = isAdmin
+        ? selectedProvider === "ALL" || String(course.providerId) === selectedProvider
+        : isProvider
+        ? courseScope === "all" || isOwnCourse
+        : true;
+
+      return matchSearch && matchSkill && matchCategory && matchProvider;
     });
 
     const withMeta = filtered.map((course) => {
+      const category = deriveCourseCategory(course.skillsTaught, course.category);
       const popularity = coursePopularityMap[course.title] || 0;
       const missingSkillsCount = (course.skillsTaught || []).filter(
         (s) => !currentTraineeSkills.has(s)
@@ -225,6 +255,7 @@ export default function CoursesAndProviders() {
 
       return {
         ...course,
+        category,
         popularity,
         missingSkillsCount,
         recommendationScore,
@@ -232,6 +263,11 @@ export default function CoursesAndProviders() {
       };
     });
 
+    if (role === "TRAINEE" && sortBy === "recommended-only") {
+      return withMeta
+        .filter((c) => c.isRecommended)
+        .sort((a, b) => b.recommendationScore - a.recommendationScore);
+    }
     if (sortBy === "popularity") {
       return [...withMeta].sort((a, b) => b.popularity - a.popularity);
     }
@@ -243,12 +279,17 @@ export default function CoursesAndProviders() {
     courses,
     search,
     selectedSkill,
+    selectedCategory,
     selectedProvider,
+    courseScope,
     sortBy,
     coursePopularityMap,
     currentTraineeSkills,
     currentTraineeCourses,
     role,
+    isAdmin,
+    isProvider,
+    myProviderId,
   ]);
 
   const coursesByProvider = useMemo(() => {
@@ -283,7 +324,7 @@ export default function CoursesAndProviders() {
 
   const openAddCourse = () => {
     setEditingCourse(null);
-    resetCourseForm({ title: "", description: "", skillsTaught: "" });
+    resetCourseForm({ title: "", description: "", category: "", skillsTaught: "" });
     setCourseModalOpen(true);
   };
 
@@ -292,6 +333,7 @@ export default function CoursesAndProviders() {
     resetCourseForm({
       title: course.title || "",
       description: course.description || "",
+      category: course.category || "",
       skillsTaught: (course.skillsTaught || []).join(", "),
     });
     setCourseModalOpen(true);
@@ -303,12 +345,14 @@ export default function CoursesAndProviders() {
       .split(",")
       .map((s) => s.trim())
       .filter(Boolean);
+    const category = data.category?.trim() || deriveCourseCategory(skillsArray);
 
     try {
       if (editingCourse) {
         await providerApi.updateCourse(editingCourse.id, {
           title: data.title,
           description: data.description,
+          category,
           skillsTaught: skillsArray,
         });
         addToast({ title: "Course Updated", description: `${data.title} changes saved.` });
@@ -316,6 +360,7 @@ export default function CoursesAndProviders() {
         await providerApi.addCourse(providerId, {
           title: data.title,
           description: data.description,
+          category,
           skillsTaught: skillsArray,
         });
         addToast({ title: "Course Published", description: `${data.title} has been added.` });
@@ -341,6 +386,20 @@ export default function CoursesAndProviders() {
     },
     onError: (err) => {
       addToast({ title: "Delete Failed", description: err.message, variant: "danger" });
+    },
+  });
+
+  const removeProviderMutation = useMutation({
+    mutationFn: (providerId) => adminApi.removeCourseProvider(providerId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["providers"] });
+      queryClient.invalidateQueries({ queryKey: ["courses"] });
+      queryClient.invalidateQueries({ queryKey: ["adminDashboard"] });
+      addToast({ title: "Provider Removed", description: "Course provider removed from directory." });
+      setDeleteProviderTarget(null);
+    },
+    onError: (err) => {
+      addToast({ title: "Removal Failed", description: err.message, variant: "danger" });
     },
   });
 
@@ -400,7 +459,7 @@ export default function CoursesAndProviders() {
   });
 
   const kickMutation = useMutation({
-    mutationFn: ({ courseId, traineeId, reason }) =>
+    mutationFn: /** @param {{ courseId: any, traineeId: number, reason: string }} payload */ ({ courseId, traineeId, reason }) =>
       providerApi.kickTrainee(courseId, traineeId, reason),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["trainees"] });
@@ -421,21 +480,34 @@ export default function CoursesAndProviders() {
     <div className="space-y-5">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-50">Courses & Training Providers</h1>
-          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-            Explore accredited courses, filter by skill tags, and inspect provider directories.
+          <H2 className="!mb-0">
+            {isAdmin ? "Courses & Training Providers" : "Courses Catalog"}
+          </H2>
+          <p className="bp6-text-muted text-xs mt-1">
+            {isProvider
+              ? "Browse all accredited courses, filter by skill or category, and publish or manage your own courses."
+              : isAdmin
+              ? "Explore accredited courses, filter by skill tags or categories, and manage provider directories."
+              : "Explore accredited courses, filter by skill tags, category, or popularity, and find courses recommended for you."}
           </p>
         </div>
 
         <div className="flex items-center gap-2">
           {role === "COURSE_PROVIDER" && (
-            <Button variant="primary" size="md" onClick={openAddCourse}>
-              <Plus size={15} /> Publish Course
-            </Button>
+            <>
+              <Link to={`/providers/${myProviderId}`}>
+                <Button variant="outline" icon={<Building2 size={14} />}>
+                  My Profile
+                </Button>
+              </Link>
+              <Button variant="primary" icon={<Plus size={14} />} onClick={openAddCourse}>
+                Publish Course
+              </Button>
+            </>
           )}
           {role === "ADMIN" && (
-            <Button variant="primary" size="md" onClick={openAddProvider}>
-              <Plus size={15} /> Add Provider
+            <Button variant="primary" icon={<Plus size={14} />} onClick={openAddProvider}>
+              Add Provider
             </Button>
           )}
         </div>
@@ -444,51 +516,79 @@ export default function CoursesAndProviders() {
       <Tabs value={activeTab} onValueChange={handleTabChange}>
         <TabsList>
           <TabsTab value="courses">
-            <GraduationCap size={14} className="mr-1.5" /> Courses ({courses.length})
+            <span className="inline-flex items-center gap-1.5">
+              <GraduationCap size={14} /> Courses ({courses.length})
+            </span>
           </TabsTab>
-          <TabsTab value="providers">
-            <Building2 size={14} className="mr-1.5" /> Providers ({providers.length})
-          </TabsTab>
+          {isAdmin && (
+            <TabsTab value="providers">
+              <span className="inline-flex items-center gap-1.5">
+                <Building2 size={14} /> Providers ({providers.length})
+              </span>
+            </TabsTab>
+          )}
         </TabsList>
 
         <TabsPanel value="courses" className="space-y-5">
-          <Card>
-            <div className="p-3.5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-              <div className="relative">
-                <Input
-                  value={search}
-                  onChange={(e) => updateParams({ q: e.target.value })}
-                  placeholder="Search courses..."
-                  className="pl-9"
-                />
-                <Search size={15} className="absolute left-3 top-2.5 text-gray-400 dark:text-gray-500" />
-              </div>
+          <Card compact>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+              <Input
+                leftIcon="search"
+                value={search}
+                onChange={(e) => updateParams({ q: e.target.value })}
+                placeholder="Search courses..."
+              />
 
               <Combobox
                 items={allUniqueSkills}
                 value={selectedSkill}
                 onChange={(val) => updateParams({ skill: val || "" })}
-                placeholder="Filter by skill tag..."
+                placeholder="Filter by skill (Java, Cloud, Git)..."
               />
 
               <Select
-                value={selectedProvider}
-                onValueChange={(val) => updateParams({ provider: val })}
+                value={selectedCategory}
+                onValueChange={(val) => updateParams({ category: val })}
                 options={[
-                  { value: "ALL", label: "All Providers" },
-                  ...providers.map((p) => ({ value: String(p.id), label: p.name })),
+                  { value: "ALL", label: "All Categories" },
+                  ...allCategories.map((cat) => ({ value: cat, label: cat })),
                 ]}
               />
+
+              {isAdmin ? (
+                <Select
+                  value={selectedProvider}
+                  onValueChange={(val) => updateParams({ provider: val })}
+                  options={[
+                    { value: "ALL", label: "All Providers" },
+                    ...providers.map((p) => ({ value: String(p.id), label: p.name })),
+                  ]}
+                />
+              ) : isProvider ? (
+                <Select
+                  value={courseScope}
+                  onValueChange={(val) => updateParams({ scope: val })}
+                  options={[
+                    { value: "all", label: "All Catalog Courses" },
+                    { value: "mine", label: "My Published Courses" },
+                  ]}
+                />
+              ) : (
+                <div className="hidden lg:block" />
+              )}
 
               <Select
                 value={sortBy}
                 onValueChange={(val) => updateParams({ sort: val })}
                 options={[
                   ...(role === "TRAINEE"
-                    ? [{ value: "recommended", label: "Sort: Suggested for You" }]
+                    ? [
+                        { value: "recommended", label: "Recommended for You" },
+                        { value: "recommended-only", label: "Only Recommended Courses" },
+                      ]
                     : []),
                   { value: "default", label: "Sort: Default Order" },
-                  { value: "popularity", label: "Sort: Most Enrolled" },
+                  { value: "popularity", label: "Popularity (Most Enrolled)" },
                 ]}
               />
             </div>
@@ -500,7 +600,7 @@ export default function CoursesAndProviders() {
             <ErrorState title="Failed to load courses" error={coursesErrObj} onRetry={refetchCourses} />
           ) : scoredCourses.length === 0 ? (
             <EmptyState
-              icon={GraduationCap}
+              icon={<GraduationCap size={28} />}
               title="No matching courses"
               description="Try adjusting your search keyword, skill tag, or provider filter."
             />
@@ -509,69 +609,97 @@ export default function CoursesAndProviders() {
               {scoredCourses.map((course) => {
                 const isEnrolled = currentTraineeCourses.enrolled.has(course.title);
                 const isCompleted = currentTraineeCourses.completed.has(course.title);
-                const isOwner = role === "COURSE_PROVIDER" && course.providerId === (user?.id || 1);
+                const isOwner = isProvider && Number(course.providerId) === Number(myProviderId);
 
                 return (
-                  <Card key={course.id} className="flex flex-col justify-between">
-                    <CardHeader className="flex-col items-start gap-2">
-                      <div className="flex items-center justify-between w-full gap-2">
+                  <Section
+                    key={course.id}
+                    title={course.title}
+                    subtitle={
+                      !isProvider ? (
                         <Link
                           to={`/providers/${course.providerId}`}
-                          className="text-xs font-medium text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100 hover:underline inline-flex items-center gap-1 truncate"
+                          className="inline-flex items-center gap-1 hover:underline"
                         >
-                          <Building2 size={13} className="shrink-0" />
-                          <span className="truncate">{course.providerName}</span>
+                          <Building2 size={12} /> {course.providerName}
                         </Link>
+                      ) : isOwner ? (
+                        <Link
+                          to={`/providers/${myProviderId}`}
+                          className="inline-flex items-center gap-1 hover:underline"
+                        >
+                          <Building2 size={12} /> {course.providerName} (You)
+                        </Link>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 bp6-text-muted">
+                          <Building2 size={12} /> Accredited Catalog Course
+                        </span>
+                      )
+                    }
+                    rightElement={
+                      <div className="flex items-center gap-1.5">
+                        <Badge variant="neutral">{course.category}</Badge>
                         {course.popularity > 0 && (
-                          <Badge variant="outline" className="shrink-0">
-                            <Users size={11} className="mr-1" /> {course.popularity} Enrolled
+                          <Badge variant="outline" icon={<Users size={11} />}>
+                            {course.popularity}
                           </Badge>
                         )}
                       </div>
-
-                      <CardTitle className="text-base leading-snug">{course.title}</CardTitle>
-
+                    }
+                    className="flex flex-col"
+                  >
+                    <SectionCard className="space-y-4 flex-1">
                       {course.isRecommended && (
-                        <Badge variant="dark" className="gap-1">
-                          <Sparkles size={11} /> Suggested for you
-                        </Badge>
+                        <div>
+                          <Badge variant="primary" icon={<Sparkles size={11} />}>
+                            Suggested for you
+                          </Badge>
+                        </div>
                       )}
-                    </CardHeader>
 
-                    <CardContent className="space-y-4 flex-1">
-                      <p className="text-xs text-gray-600 dark:text-gray-400 leading-relaxed line-clamp-3">
+                      <p className="text-xs bp6-text-muted leading-relaxed line-clamp-3">
                         {course.description}
                       </p>
 
                       <div>
-                        <p className="text-[11px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">
+                        <p className="text-[11px] font-semibold bp6-text-muted uppercase tracking-wider mb-1.5">
                           Skills Taught
                         </p>
                         <div className="flex flex-wrap gap-1.5">
                           {(course.skillsTaught || []).map((skill) => (
-                            <Badge key={skill} variant="neutral">
+                            <Badge key={skill} variant="secondary">
                               {skill}
                             </Badge>
                           ))}
                         </div>
                       </div>
-                    </CardContent>
+                    </SectionCard>
 
-                    <CardFooter className="flex items-center justify-between gap-2 flex-wrap">
-                      <Link to={`/providers/${course.providerId}`}>
-                        <Button variant="ghost" size="sm">
-                          Provider <ExternalLink size={12} />
-                        </Button>
-                      </Link>
+                    <SectionCard compact className="flex items-center justify-between gap-2 flex-wrap">
+                      {!isProvider ? (
+                        <Link to={`/providers/${course.providerId}`}>
+                          <Button variant="ghost" size="sm" endIcon={<ExternalLink size={12} />}>
+                            Provider
+                          </Button>
+                        </Link>
+                      ) : isOwner ? (
+                        <Link to={`/providers/${myProviderId}`}>
+                          <Button variant="ghost" size="sm" endIcon={<ExternalLink size={12} />}>
+                            My Profile
+                          </Button>
+                        </Link>
+                      ) : (
+                        <Badge variant="outline">Catalog Course</Badge>
+                      )}
 
                       {role === "TRAINEE" && (
                         <div>
                           {isCompleted ? (
-                            <Badge variant="emerald" className="gap-1">
-                              <CheckCircle2 size={12} /> Completed
+                            <Badge variant="success" icon={<CheckCircle2 size={12} />}>
+                              Completed
                             </Badge>
                           ) : isEnrolled ? (
-                            <Badge variant="neutral">Enrolled</Badge>
+                            <Badge variant="secondary">Enrolled</Badge>
                           ) : (
                             <Button
                               variant="primary"
@@ -586,57 +714,51 @@ export default function CoursesAndProviders() {
                       )}
 
                       {isOwner && (
-                        <div className="flex items-center gap-1">
+                        <ButtonGroup>
                           <Button
                             variant="outline"
                             size="sm"
+                            icon={<Pencil size={12} />}
                             onClick={() => openEditCourse(course)}
                             aria-label={`Edit ${course.title}`}
-                          >
-                            <Pencil size={12} />
-                          </Button>
+                          />
                           <Button
                             variant="outline"
                             size="sm"
+                            icon={<UserX size={12} />}
                             onClick={() => setKickModalTarget(course)}
                           >
-                            <UserX size={12} /> Kick
+                            Kick
                           </Button>
                           <Button
                             variant="ghost"
                             size="sm"
-                            className="text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/60"
+                            intent={Intent.DANGER}
+                            icon={<Trash2 size={13} />}
                             onClick={() => setDeleteCourseTarget(course)}
                             aria-label={`Delete ${course.title}`}
-                          >
-                            <Trash2 size={13} />
-                          </Button>
-                        </div>
+                          />
+                        </ButtonGroup>
                       )}
-                    </CardFooter>
-                  </Card>
+                    </SectionCard>
+                  </Section>
                 );
               })}
             </div>
           )}
         </TabsPanel>
 
-        <TabsPanel value="providers" className="space-y-5">
+        {isAdmin && (
+          <TabsPanel value="providers" className="space-y-5">
           {!providersLoading && !providersError && providers.length > 0 && (
-            <Card>
-              <div className="p-3.5 max-w-md">
-                <div className="relative">
-                  <Input
-                    value={providerSearch}
-                    onChange={(e) => updateParams({ pSearch: e.target.value })}
-                    placeholder="Search providers by name, email, or description..."
-                    className="pl-9"
-                  />
-                  <Search
-                    size={15}
-                    className="absolute left-3 top-2.5 text-gray-400 dark:text-gray-500"
-                  />
-                </div>
+            <Card compact>
+              <div className="max-w-md">
+                <Input
+                  leftIcon="search"
+                  value={providerSearch}
+                  onChange={(e) => updateParams({ pSearch: e.target.value })}
+                  placeholder="Search providers by name, email, or description..."
+                />
               </div>
             </Card>
           )}
@@ -651,13 +773,13 @@ export default function CoursesAndProviders() {
             />
           ) : providers.length === 0 ? (
             <EmptyState
-              icon={Building2}
+              icon={<Building2 size={28} />}
               title="No training providers"
               description="No accredited course providers have been added yet."
             />
           ) : filteredProviders.length === 0 ? (
             <EmptyState
-              icon={Building2}
+              icon={<Building2 size={28} />}
               title="No matching providers"
               description="Try adjusting your search query to find a training provider."
             />
@@ -666,35 +788,35 @@ export default function CoursesAndProviders() {
               {filteredProviders.map((provider) => {
                 const providerCourses = coursesByProvider[provider.id] || [];
                 return (
-                  <Card key={provider.id} className="flex flex-col justify-between">
-                    <CardHeader>
-                      <div className="min-w-0">
-                        <CardTitle className="truncate">{provider.name}</CardTitle>
-                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 truncate">
-                          {provider.contactEmail}
-                        </p>
-                      </div>
-                    </CardHeader>
-
-                    <CardContent className="space-y-3 flex-1">
-                      <p className="text-xs text-gray-600 dark:text-gray-400 leading-relaxed">
+                  <Section
+                    key={provider.id}
+                    title={provider.name}
+                    subtitle={provider.contactEmail}
+                    className="flex flex-col"
+                  >
+                    <SectionCard className="space-y-3 flex-1">
+                      <p className="text-xs bp6-text-muted leading-relaxed">
                         {provider.description || "Accredited skilling partner."}
                       </p>
                       {provider.website && (
-                        <a
-                          href={provider.website}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-xs font-medium text-gray-900 underline hover:text-gray-700 dark:text-gray-100 dark:hover:text-gray-300 inline-flex items-center gap-1"
-                        >
-                          Visit Website <ExternalLink size={12} />
-                        </a>
+                        <div>
+                          <a
+                            href={provider.website}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-xs font-medium underline inline-flex items-center gap-1"
+                          >
+                            Visit Website <ExternalLink size={12} />
+                          </a>
+                        </div>
                       )}
+
+                      <Divider className="!my-2" />
 
                       <Accordion>
                         <AccordionItem value="courses">
                           <AccordionHeader>
-                            <AccordionTrigger className="px-3 py-2 text-xs">
+                            <AccordionTrigger>
                               Courses Offered ({providerCourses.length})
                             </AccordionTrigger>
                           </AccordionHeader>
@@ -706,7 +828,7 @@ export default function CoursesAndProviders() {
                                     key={course.id}
                                     className="flex items-center justify-between gap-2 text-xs"
                                   >
-                                    <span className="truncate font-medium text-gray-900 dark:text-gray-100">
+                                    <span className="truncate font-medium">
                                       {course.title}
                                     </span>
                                     {(course.skillsTaught?.length || 0) > 0 && (
@@ -721,16 +843,16 @@ export default function CoursesAndProviders() {
                                 ))}
                               </ul>
                             ) : (
-                              <p className="text-xs text-gray-500 dark:text-gray-400">
+                              <p className="text-xs bp6-text-muted">
                                 No courses listed yet.
                               </p>
                             )}
                           </AccordionPanel>
                         </AccordionItem>
                       </Accordion>
-                    </CardContent>
+                    </SectionCard>
 
-                    <CardFooter className="flex items-center justify-between gap-2">
+                    <SectionCard compact className="flex items-center justify-between gap-2">
                       <Link to={`/providers/${provider.id}`}>
                         <Button variant="outline" size="sm">
                           View Profile
@@ -738,28 +860,34 @@ export default function CoursesAndProviders() {
                       </Link>
 
                       {role === "ADMIN" && (
-                        <div className="flex items-center gap-1.5">
+                        <ButtonGroup>
                           <Button
                             variant="outline"
                             size="sm"
+                            icon={<Pencil size={12} />}
                             onClick={() => openEditProvider(provider)}
                           >
-                            <Pencil size={12} /> Edit
+                            Edit
                           </Button>
-                          <Tooltip content="The backend exposes no provider deletion endpoint.">
-                            <Button variant="ghost" size="sm" disabled>
-                              Remove
-                            </Button>
-                          </Tooltip>
-                        </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            intent={Intent.DANGER}
+                            icon={<Trash2 size={12} />}
+                            onClick={() => setDeleteProviderTarget(provider)}
+                          >
+                            Remove
+                          </Button>
+                        </ButtonGroup>
                       )}
-                    </CardFooter>
-                  </Card>
+                    </SectionCard>
+                  </Section>
                 );
               })}
             </div>
           )}
         </TabsPanel>
+        )}
       </Tabs>
 
       {/* Add / Edit Course Dialog */}
@@ -796,6 +924,18 @@ export default function CoursesAndProviders() {
                 rows={3}
                 placeholder="Curriculum summary..."
                 hasError={Boolean(courseErrors.description)}
+              />
+            </Field>
+
+            <Field
+              label="Course Category"
+              description="Leave blank to auto-detect from skills (e.g. Backend, DevOps, Cloud)"
+              id="course-category"
+            >
+              <Input
+                id="course-category"
+                {...registerCourse("category")}
+                placeholder="e.g. DevOps"
               />
             </Field>
 
@@ -848,6 +988,37 @@ export default function CoursesAndProviders() {
               onClick={() => deleteCourseTarget && deleteCourseMutation.mutate(deleteCourseTarget.id)}
             >
               Delete Course
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Delete Provider AlertDialog */}
+      <AlertDialog
+        open={Boolean(deleteProviderTarget)}
+        onOpenChange={(open) => {
+          if (!open) setDeleteProviderTarget(null);
+        }}
+      >
+        <AlertDialogContent variant="danger">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove Course Provider?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This removes <strong>{deleteProviderTarget?.name}</strong> and its courses from
+              SkillTrack. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogClose render={<Button variant="outline" size="sm">Cancel</Button>} />
+            <Button
+              variant="danger"
+              size="sm"
+              loading={removeProviderMutation.isPending}
+              onClick={() =>
+                deleteProviderTarget && removeProviderMutation.mutate(deleteProviderTarget.id)
+              }
+            >
+              Remove Provider
             </Button>
           </AlertDialogFooter>
         </AlertDialogContent>

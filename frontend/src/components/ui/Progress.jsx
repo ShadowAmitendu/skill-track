@@ -1,48 +1,51 @@
-import { Progress as BaseProgress } from "@base-ui/react/progress";
+import { Intent, ProgressBar } from "@blueprintjs/core";
 
+const intentMap = {
+  default: Intent.PRIMARY,
+  primary: Intent.PRIMARY,
+  success: Intent.SUCCESS,
+  warning: Intent.WARNING,
+  danger: Intent.DANGER,
+};
+
+/**
+ * @param {object} props
+ * @param {number} [props.value]
+ * @param {number} [props.max]
+ * @param {"default"|"primary"|"success"|"warning"|"danger"|string} [props.variant]
+ * @param {string} [props.className]
+ * @param {boolean} [props.stripes]
+ * @param {boolean} [props.animate]
+ * @param {any} [props.label]
+ * @param {boolean} [props.showValue]
+ */
 export function Progress({
   value = 0,
   max = 100,
   label,
   showValue = false,
-  variant = "neutral",
+  variant = "default",
   className = "",
-  ...props
 }) {
-  const safeMax = max > 0 ? max : 100;
-  const percentage = Math.min(Math.max(0, Math.round((value / safeMax) * 100)), 100);
-
-  const colors = {
-    neutral: "bg-gray-900 dark:bg-gray-100",
-    blue: "bg-gray-900 dark:bg-gray-100",
-    indigo: "bg-gray-900 dark:bg-gray-100",
-    emerald: "bg-emerald-700 dark:bg-emerald-400",
-    amber: "bg-amber-600 dark:bg-amber-400",
-    rose: "bg-red-700 dark:bg-red-400",
-  };
+  const pct = Math.min(100, Math.max(0, max > 0 ? (value / max) * 100 : 0));
+  const intent = intentMap[variant] || Intent.PRIMARY;
 
   return (
-    <BaseProgress.Root
-      value={percentage}
-      max={100}
-      className={`grid w-full gap-y-1.5 ${className}`}
-      {...props}
-    >
+    <div className={className}>
       {(label || showValue) && (
-        <div className="flex items-center justify-between text-xs font-medium text-gray-900 dark:text-gray-100">
-          {label ? <BaseProgress.Label>{label}</BaseProgress.Label> : <span />}
+        <div className="flex items-center justify-between text-xs mb-1.5">
+          {label && <span className="bp6-text-muted">{label}</span>}
           {showValue && (
-            <BaseProgress.Value className="text-gray-600 dark:text-gray-400 tabular-nums">
-              {() => `${percentage}%`}
-            </BaseProgress.Value>
+            <span className="font-medium tabular-nums">{Math.round(pct)}%</span>
           )}
         </div>
       )}
-      <BaseProgress.Track className="h-1.5 w-full overflow-hidden rounded-full bg-gray-200 dark:bg-gray-800 shadow-[inset_0_0_0_1px_rgba(0,0,0,0.05)] dark:shadow-none">
-        <BaseProgress.Indicator
-          className={`block h-full rounded-full ${colors[variant] || colors.neutral}`}
-        />
-      </BaseProgress.Track>
-    </BaseProgress.Root>
+      <ProgressBar
+        value={pct / 100}
+        intent={intent}
+        stripes={false}
+        animate={false}
+      />
+    </div>
   );
 }

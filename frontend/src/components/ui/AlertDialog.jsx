@@ -1,100 +1,210 @@
-import { AlertDialog as BaseAlertDialog } from "@base-ui/react/alert-dialog";
-import { AlertTriangle, Info } from "lucide-react";
+import {
+  Children,
+  cloneElement,
+  createContext,
+  isValidElement,
+  useContext,
+} from "react";
+import {
+  Alert as BpAlert,
+  Button,
+  Callout,
+  Dialog as BpDialog,
+  DialogBody as BpDialogBody,
+  DialogFooter as BpDialogFooter,
+  H5,
+  Intent,
+} from "@blueprintjs/core";
 
-export function AlertDialog({ children, open, onOpenChange, ...props }) {
+/** @type {import("react").Context<{ open: boolean, onOpenChange: (open: boolean) => void }>} */
+const AlertDialogContext = createContext({
+  open: false,
+  onOpenChange: () => {},
+});
+
+const variantConfig = {
+  warning: { intent: Intent.WARNING, icon: "warning-sign" },
+  danger: { intent: Intent.DANGER, icon: "trash" },
+  info: { intent: Intent.PRIMARY, icon: "info-sign" },
+};
+
+function extractPlainText(node) {
+  if (typeof node === "string" || typeof node === "number") return String(node);
+  if (Array.isArray(node)) return node.map(extractPlainText).join("").trim();
+  if (isValidElement(node) && node.props?.children) {
+    return extractPlainText(node.props.children);
+  }
+  return "";
+}
+
+/** @param {{ open?: boolean, onOpenChange?: (open: boolean) => void, children?: any }} props */
+export function AlertDialog({ open, onOpenChange, children }) {
   return (
-    <BaseAlertDialog.Root open={open} onOpenChange={onOpenChange} {...props}>
+    <AlertDialogContext.Provider value={{ open: Boolean(open), onOpenChange }}>
       {children}
-    </BaseAlertDialog.Root>
+    </AlertDialogContext.Provider>
   );
 }
 
-export const AlertDialogTrigger = BaseAlertDialog.Trigger;
-export const AlertDialogClose = BaseAlertDialog.Close;
-
+/**
+ * @param {object} props
+ * @param {any} [props.children]
+ * @param {string} [props.variant]
+ * @param {any} [props.icon]
+ * @param {string} [props.className]
+ */
 export function AlertDialogContent({
   children,
+  variant = "warning",
+  icon,
   className = "",
-  maxWidth = "max-w-md",
-  variant = "danger",
-  icon: CustomIcon,
-  ...props
 }) {
-  const iconConfig = {
-    danger: {
-      icon: AlertTriangle,
-      color: "text-red-700 bg-red-50 border-red-200 dark:text-red-400 dark:bg-red-950/60 dark:border-red-900",
-    },
-    warning: {
-      icon: AlertTriangle,
-      color: "text-amber-700 bg-amber-50 border-amber-200 dark:text-amber-400 dark:bg-amber-950/60 dark:border-amber-900",
-    },
-    info: {
-      icon: Info,
-      color: "text-gray-700 bg-gray-100 border-gray-200 dark:text-gray-200 dark:bg-gray-800 dark:border-gray-700",
-    },
+  const { open, onOpenChange } = useContext(AlertDialogContext);
+  const cfg = variantConfig[variant] || variantConfig.warning;
+  const resolvedIcon = icon || cfg.icon;
+
+  let title = null;
+  let description = null;
+  let footerChildren = [];
+  const extraBody = [];
+
+  Children.forEach(children, (child) => {
+    if (!isValidElement(child)) {
+      if (child !== null && child !== undefined && child !== false) {
+        extraBody.push(child);
+      }
+      return;
+    }
+
+    if (child.type === AlertDialogHeader) {
+      Children.forEach(child.props.children, (hc) => {
+        if (!isValidElement(hc)) return;
+        if (hc.type === AlertDialogTitle) {
+          title = hc.props.children;
+        } else if (hc.type === AlertDialogDescription) {
+          description = hc.props.children;
+        }
+      });
+    } else if (child.type === AlertDialogFooter) {
+      Children.forEach(child.props.children, (fc) => {
+        if (fc !== null && fc !== undefined && fc !== false) {
+          footerChildren.push(fc);
+        }
+      });
+    } else {
+      extraBody.push(child);
+    }
+  });
+
+  // If there are no extra form controls in the body, render Blueprint's native Alert!
+  if (extraBody.length === 0) {
+    const cancelChild = footerChildren.find(
+      (c) => isValidElement(c) && c.type === AlertDialogClose
+    );
+    const confirmChild = footerChildren.find(
+      (c) => isValidElement(c) && c.type !== AlertDialogClose
+    );
+
+    const cancelText = cancelChild
+      ? extractPlainText(cancelChild.props.render || cancelChild.props.children) || "Cancel"
+      : "Cancel";
+    const confirmText = confirmChild
+      ? extractPlainText(confirmChild.props.children) || "Confirm"
+      : "Confirm";
+    const isConfirmDisabled = Boolean(confirmChild?.props?.disabled && !confirmChild?.props?.loading);
+    const isConfirmLoading = Boolean(confirmChild?.props?.loading);
+
+    if (!isConfirmDisabled && confirmText) {
+      return (
+        <BpAlert
+          isOpen={open}
+          intent={cfg.intent}
+          icon={resolvedIcon}
+          confirmButtonText={confirmText}
+          cancelButtonText={cancelText}
+          loading={isConfirmLoading}
+          canOutsideClickCancel={!isConfirmLoading}
+          canEscapeKeyCancel={!isConfirmLoading}
+          transitionDuration={0}
+          className={className}
+          onConfirm={() => confirmChild?.props?.onClick?.()}
+          onCancel={() => onOpenChange?.(false)}
+        >
+          {title && <H5 className="!mb-1">{title}</H5>}
+          {description && <div className="text-sm">{description}</div>}
+        </BpAlert>
+      );
+    }
+  }
+
+  return (
+    <BpDialog
+      isOpen={open}
+      onClose={() => onOpenChange?.(false)}
+      title={title}
+      icon={resolvedIcon}
+      transitionDuration={0}
+      canOutsideClickClose
+      canEscapeKeyClose
+      style={{ width: "100%", maxWidth: "460px" }}
+      className={className}
+    >
+      <BpDialogBody>
+        {description && (
+          <Callout intent={cfg.intent} className={extraBody.length > 0 ? "mb-4" : ""}>
+            {description}
+          </Callout>
+        )}
+        {extraBody}
+      </BpDialogBody>
+      {footerChildren.length > 0 && <BpDialogFooter actions={footerChildren} />}
+    </BpDialog>
+  );
+}
+
+/** @param {{ children?: any, className?: string }} [_props] */
+export function AlertDialogHeader(_props) {
+  return null;
+}
+
+/** @param {{ children?: any, className?: string }} [_props] */
+export function AlertDialogTitle(_props) {
+  return null;
+}
+
+/** @param {{ children?: any, className?: string }} [_props] */
+export function AlertDialogDescription(_props) {
+  return null;
+}
+
+/** @param {{ children?: any, className?: string }} [_props] */
+export function AlertDialogFooter(_props) {
+  return null;
+}
+
+/**
+ * @param {{ render?: any, children?: any, onClick?: (e: any) => void, [key: string]: any }} props
+ */
+export function AlertDialogClose({ render, children, onClick, ...props }) {
+  const { onOpenChange } = useContext(AlertDialogContext);
+  const handleClose = (e) => {
+    onClick?.(e);
+    onOpenChange?.(false);
   };
 
-  const currentIcon = iconConfig[variant] || iconConfig.danger;
-  const IconComponent = CustomIcon || currentIcon.icon;
+  if (render && isValidElement(render)) {
+    return cloneElement(render, {
+      ...props,
+      onClick: (e) => {
+        render.props.onClick?.(e);
+        handleClose(e);
+      },
+    });
+  }
 
   return (
-    <BaseAlertDialog.Portal>
-      <BaseAlertDialog.Backdrop className="fixed inset-0 min-h-dvh bg-black opacity-20 dark:opacity-60 z-50" />
-      <BaseAlertDialog.Popup
-        className={`fixed top-1/2 left-1/2 z-50 w-[calc(100vw-2rem)] ${maxWidth} max-h-[calc(100dvh-2rem)] overflow-y-auto -translate-x-1/2 -translate-y-1/2 rounded-lg bg-gray-50 p-6 text-gray-900 outline-1 outline-gray-200 shadow-lg dark:bg-gray-900 dark:text-gray-50 dark:outline-gray-800 dark:shadow-black/50 ${className}`}
-        {...props}
-      >
-        <div className="flex items-start gap-3.5">
-          <div
-            className={`w-9 h-9 rounded-md border flex items-center justify-center shrink-0 ${currentIcon.color}`}
-          >
-            <IconComponent size={18} />
-          </div>
-          <div className="flex-1 min-w-0">{children}</div>
-        </div>
-      </BaseAlertDialog.Popup>
-    </BaseAlertDialog.Portal>
-  );
-}
-
-export function AlertDialogHeader({ children, className = "", ...props }) {
-  return (
-    <div className={`mb-2 ${className}`} {...props}>
-      {children}
-    </div>
-  );
-}
-
-export function AlertDialogTitle({ children, className = "", ...props }) {
-  return (
-    <BaseAlertDialog.Title
-      className={`text-base font-semibold text-gray-900 dark:text-gray-50 leading-6 ${className}`}
-      {...props}
-    >
-      {children}
-    </BaseAlertDialog.Title>
-  );
-}
-
-export function AlertDialogDescription({ children, className = "", ...props }) {
-  return (
-    <BaseAlertDialog.Description
-      className={`text-sm text-gray-600 dark:text-gray-400 mt-1 leading-relaxed ${className}`}
-      {...props}
-    >
-      {children}
-    </BaseAlertDialog.Description>
-  );
-}
-
-export function AlertDialogFooter({ children, className = "", ...props }) {
-  return (
-    <div
-      className={`mt-5 pt-4 border-t border-gray-200 dark:border-gray-800 flex items-center justify-end gap-2.5 ${className}`}
-      {...props}
-    >
-      {children}
-    </div>
+    <Button variant="outlined" onClick={handleClose} {...props}>
+      {children || "Cancel"}
+    </Button>
   );
 }

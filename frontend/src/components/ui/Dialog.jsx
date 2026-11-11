@@ -1,82 +1,216 @@
-import { Dialog as BaseDialog } from "@base-ui/react/dialog";
-import { X } from "lucide-react";
+import {
+  Children,
+  cloneElement,
+  createContext,
+  isValidElement,
+  useContext,
+} from "react";
+import {
+  Button,
+  Dialog as BpDialog,
+  DialogBody as BpDialogBody,
+  DialogFooter as BpDialogFooter,
+} from "@blueprintjs/core";
 
-export function Dialog({ children, open, onOpenChange, ...props }) {
+/** @type {import("react").Context<{ open: boolean, onOpenChange: (open: boolean) => void }>} */
+const DialogContext = createContext({
+  open: false,
+  onOpenChange: () => {},
+});
+
+const maxWidthPxMap = {
+  "max-w-sm": "384px",
+  "max-w-md": "448px",
+  "max-w-lg": "512px",
+  "max-w-xl": "576px",
+  "max-w-2xl": "672px",
+};
+
+function getTextNodesAndParts(children) {
+  let title = undefined;
+  let description = undefined;
+  let footerChildren = null;
+  let footerClassName = "";
+  let formElement = null;
+  const bodyChildren = [];
+
+  Children.forEach(children, (child) => {
+    if (!isValidElement(child)) {
+      if (child !== null && child !== undefined && child !== false) {
+        bodyChildren.push(child);
+      }
+      return;
+    }
+
+    if (child.type === DialogHeader) {
+      Children.forEach(child.props.children, (headerChild) => {
+        if (!isValidElement(headerChild)) return;
+        if (headerChild.type === DialogTitle) {
+          title = headerChild.props.children;
+        } else if (headerChild.type === DialogDescription) {
+          description = headerChild.props.children;
+        }
+      });
+    } else if (child.type === DialogFooter) {
+      footerChildren = child.props.children;
+      footerClassName = child.props.className || "";
+    } else if (child.type === "form") {
+      formElement = child;
+    } else {
+      bodyChildren.push(child);
+    }
+  });
+
+  return {
+    title,
+    description,
+    footerChildren,
+    footerClassName,
+    formElement,
+    bodyChildren,
+  };
+}
+
+/** @param {{ open?: boolean, onOpenChange?: (open: boolean) => void, children?: any }} props */
+export function Dialog({ open, onOpenChange, children }) {
   return (
-    <BaseDialog.Root open={open} onOpenChange={onOpenChange} {...props}>
+    <DialogContext.Provider value={{ open: Boolean(open), onOpenChange }}>
       {children}
-    </BaseDialog.Root>
+    </DialogContext.Provider>
   );
 }
 
-export const DialogTrigger = BaseDialog.Trigger;
-export const DialogClose = BaseDialog.Close;
-
+/**
+ * @param {object} props
+ * @param {any} [props.children]
+ * @param {string} [props.className]
+ * @param {string} [props.maxWidth]
+ * @param {any} [props.icon]
+ * @param {boolean} [props.canOutsideClickClose]
+ * @param {boolean} [props.canEscapeKeyClose]
+ * @param {any} [props.style]
+ */
 export function DialogContent({
   children,
   className = "",
-  showClose = true,
   maxWidth = "max-w-lg",
-  ...props
+  icon,
+  style,
 }) {
-  return (
-    <BaseDialog.Portal>
-      <BaseDialog.Backdrop className="fixed inset-0 min-h-dvh bg-black opacity-20 dark:opacity-60 z-50" />
-      <BaseDialog.Popup
-        className={`fixed top-1/2 left-1/2 z-50 w-[calc(100vw-2rem)] ${maxWidth} max-h-[calc(100dvh-2rem)] overflow-y-auto -translate-x-1/2 -translate-y-1/2 rounded-lg bg-gray-50 p-6 text-gray-900 outline-1 outline-gray-200 shadow-lg dark:bg-gray-900 dark:text-gray-50 dark:outline-gray-800 dark:shadow-black/50 ${className}`}
-        {...props}
-      >
-        {children}
-        {showClose && (
-          <BaseDialog.Close
-            className="absolute top-4 right-4 inline-flex h-7 w-7 items-center justify-center rounded-md text-gray-500 hover:bg-gray-200/70 hover:text-gray-900 cursor-pointer outline-none focus-visible:outline-2 focus-visible:outline-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-50 dark:focus-visible:outline-gray-100"
-            aria-label="Close dialog"
-          >
-            <X size={16} />
-          </BaseDialog.Close>
+  const { open, onOpenChange } = useContext(DialogContext);
+  const parts = getTextNodesAndParts(children);
+
+  let renderedContent;
+
+  if (parts.formElement) {
+    let formFooter = null;
+    let formFooterClass = "";
+    const formBody = [];
+
+    Children.forEach(parts.formElement.props.children, (fc) => {
+      if (isValidElement(fc) && fc.type === DialogFooter) {
+        formFooter = fc.props.children;
+        formFooterClass = fc.props.className || "";
+      } else {
+        formBody.push(fc);
+      }
+    });
+
+    renderedContent = cloneElement(
+      parts.formElement,
+      {},
+      <>
+        <BpDialogBody>
+          {parts.description && (
+            <p className="bp6-text-muted text-xs mb-4">{parts.description}</p>
+          )}
+          {formBody}
+        </BpDialogBody>
+        {formFooter && <BpDialogFooter className={formFooterClass} actions={formFooter} />}
+      </>
+    );
+  } else {
+    renderedContent = (
+      <>
+        <BpDialogBody>
+          {parts.description && (
+            <p className="bp6-text-muted text-xs mb-4">{parts.description}</p>
+          )}
+          {parts.bodyChildren}
+        </BpDialogBody>
+        {parts.footerChildren && (
+          <BpDialogFooter className={parts.footerClassName} actions={parts.footerChildren} />
         )}
-      </BaseDialog.Popup>
-    </BaseDialog.Portal>
-  );
-}
+      </>
+    );
+  }
 
-export function DialogHeader({ children, className = "", ...props }) {
   return (
-    <div className={`mb-4 pr-8 ${className}`} {...props}>
-      {children}
-    </div>
-  );
-}
-
-export function DialogTitle({ children, className = "", ...props }) {
-  return (
-    <BaseDialog.Title
-      className={`text-base font-semibold text-gray-900 dark:text-gray-50 leading-6 ${className}`}
-      {...props}
+    <BpDialog
+      isOpen={open}
+      onClose={() => onOpenChange?.(false)}
+      title={parts.title}
+      icon={icon}
+      transitionDuration={0}
+      canOutsideClickClose
+      canEscapeKeyClose
+      style={{
+        width: "100%",
+        maxWidth: maxWidthPxMap[maxWidth] || "512px",
+        ...style,
+      }}
+      className={className}
     >
-      {children}
-    </BaseDialog.Title>
+      {renderedContent}
+    </BpDialog>
   );
 }
 
-export function DialogDescription({ children, className = "", ...props }) {
+/** @param {{ children?: any, className?: string }} [_props] */
+export function DialogHeader(_props) {
+  return null;
+}
+
+/** @param {{ children?: any, className?: string }} [_props] */
+export function DialogTitle(_props) {
+  return null;
+}
+
+/** @param {{ children?: any, className?: string }} [_props] */
+export function DialogDescription(_props) {
+  return null;
+}
+
+/** @param {{ children?: any, className?: string }} [_props] */
+export function DialogFooter(_props) {
+  return null;
+}
+
+/**
+ * @param {{ render?: any, children?: any, onClick?: (e: any) => void, [key: string]: any }} props
+ */
+export function DialogClose({ render, children, onClick, ...props }) {
+  const { onOpenChange } = useContext(DialogContext);
+  const handleClose = (e) => {
+    onClick?.(e);
+    onOpenChange?.(false);
+  };
+
+  if (render && isValidElement(render)) {
+    return cloneElement(render, {
+      ...props,
+      onClick: (e) => {
+        render.props.onClick?.(e);
+        handleClose(e);
+      },
+    });
+  }
+
   return (
-    <BaseDialog.Description
-      className={`text-sm text-gray-600 dark:text-gray-400 mt-1 leading-relaxed ${className}`}
-      {...props}
-    >
-      {children}
-    </BaseDialog.Description>
+    <Button variant="outlined" onClick={handleClose} {...props}>
+      {children || "Cancel"}
+    </Button>
   );
 }
 
-export function DialogFooter({ children, className = "", ...props }) {
-  return (
-    <div
-      className={`mt-5 pt-4 border-t border-gray-200 dark:border-gray-800 flex items-center justify-end gap-2.5 ${className}`}
-      {...props}
-    >
-      {children}
-    </div>
-  );
-}
+export { BpDialog as BlueprintDialog, BpDialogBody as DialogBody, BpDialogFooter as BlueprintDialogFooter };

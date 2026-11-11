@@ -3,14 +3,14 @@ import {
   mockTrainees,
   mockProviders,
   mockCourses,
-  mockSkillsSummary,
+  mockSkillCatalog,
 } from "./mockData";
+import { deriveCourseCategory, hasTraineeRespondedFollowUp, isEmployedStatus } from "../utils/domain";
 
 // In-memory clones for stateful interactions during Demo Mode
 let trainees = JSON.parse(JSON.stringify(mockTrainees));
 let providers = JSON.parse(JSON.stringify(mockProviders));
 let courses = JSON.parse(JSON.stringify(mockCourses));
-let skillsSummary = JSON.parse(JSON.stringify(mockSkillsSummary));
 
 function envelope(data, message = "Success") {
   return HttpResponse.json({
@@ -21,16 +21,52 @@ function envelope(data, message = "Success") {
   });
 }
 
+function buildDynamicSkillsSummary() {
+  const knownMap = new Map(
+    mockSkillCatalog.map((s) => [s.skillName.toLowerCase(), { ...s }])
+  );
+  courses.forEach((c) => {
+    (c.skillsTaught || []).forEach((sName) => {
+      const key = sName.toLowerCase();
+      if (!knownMap.has(key)) {
+        knownMap.set(key, {
+          skillId: knownMap.size + 1,
+          skillName: sName,
+          category: c.category || deriveCourseCategory([sName]),
+        });
+      }
+    });
+  });
+
+  return Array.from(knownMap.values()).map((skill) => {
+    const holders = trainees.filter((t) =>
+      (t.skills || []).some((s) => s.toLowerCase() === skill.skillName.toLowerCase())
+    );
+    return {
+      ...skill,
+      enrolledTraineesCount: holders.length,
+      traineeNames: holders.map((h) => h.fullName),
+    };
+  });
+}
+
 export const handlers = [
   // --- Admin ---
   http.get("/api/v1/admin/dashboard", () => {
-    const employed = trainees.filter((t) => t.employmentStatus === "EMPLOYED").length;
-    const unemployed = trainees.filter((t) => t.employmentStatus === "UNEMPLOYED").length;
-    const seeking = trainees.filter((t) => t.employmentStatus === "SEEKING").length;
+    const employed = trainees.filter((t) => isEmployedStatus(t.employmentStatus)).length;
+    const unemployed = trainees.filter((t) => !isEmployedStatus(t.employmentStatus)).length;
+    const seeking = trainees.filter(
+      (t) =>
+        !isEmployedStatus(t.employmentStatus) &&
+        t.unemployedReason?.toLowerCase().includes("looking")
+    ).length;
+
+    const consented = trainees.filter((t) => Boolean(t.consentGiven)).length;
+    const responded = trainees.filter((t) => hasTraineeRespondedFollowUp(t)).length;
 
     const reasons = {};
     trainees.forEach((t) => {
-      if (t.employmentStatus === "UNEMPLOYED" && t.unemployedReason) {
+      if (!isEmployedStatus(t.employmentStatus) && t.unemployedReason) {
         reasons[t.unemployedReason] = (reasons[t.unemployedReason] || 0) + 1;
       }
     });
@@ -39,6 +75,9 @@ export const handlers = [
       totalTrainees: trainees.length,
       totalCourseProviders: providers.length,
       totalCourses: courses.length,
+      totalConsents: consented,
+      followUpRespondedCount: responded,
+      followUpNotRespondedCount: Math.max(0, trainees.length - responded),
       employedStudentsCount: employed,
       unemployedStudentsCount: unemployed,
       jobSeekingStudentsCount: seeking,
@@ -51,7 +90,7 @@ export const handlers = [
   }),
 
   http.post("/api/v1/admin/trainees", async ({ request }) => {
-    const body = await request.json();
+    const body = /** @type {Record<string, any>} */ (await request.json());
     const newTrainee = {
       id: Date.now(),
       fullName: body.fullName || "New Trainee",
@@ -60,7 +99,7 @@ export const handlers = [
       consentGiven: body.consentGiven ?? true,
       allowEmails: body.allowEmails ?? true,
       adminStoppedEmail: false,
-      employmentStatus: body.employmentStatus || "SEEKING",
+      employmentStatus: body.employmentStatus || "UNEMPLOYED",
       companyName: body.companyName || "",
       currentRole: body.currentRole || "",
       currentSalary: body.currentSalary || null,
@@ -72,6 +111,7 @@ export const handlers = [
       certifications: [],
       enrolledCourses: [],
       completedCourses: [],
+      followUpResponded: body.followUpResponded ?? false,
       followUpNotes: [],
     };
     trainees.unshift(newTrainee);
@@ -98,7 +138,7 @@ export const handlers = [
   }),
 
   http.post("/api/v1/admin/providers", async ({ request }) => {
-    const body = await request.json();
+    const body = /** @type {Record<string, any>} */ (await request.json());
     const newProvider = {
       id: Date.now(),
       name: body.name,
@@ -112,13 +152,20 @@ export const handlers = [
 
   http.put("/api/v1/admin/providers/:id", async ({ params, request }) => {
     const id = Number(params.id);
-    const body = await request.json();
+    const body = /** @type {Record<string, any>} */ (await request.json());
     const idx = providers.findIndex((p) => p.id === id);
     if (idx !== -1) {
       providers[idx] = { ...providers[idx], ...body, id };
       return envelope(providers[idx], "Course provider updated");
     }
     return HttpResponse.json({ success: false, message: "Provider not found" }, { status: 404 });
+  }),
+
+  http.delete("/api/v1/admin/providers/:id", ({ params }) => {
+    const id = Number(params.id);
+    providers = providers.filter((p) => p.id !== id);
+    courses = courses.filter((c) => c.providerId !== id);
+    return envelope(null, "Course provider removed successfully");
   }),
 
   // --- Trainees ---
@@ -134,7 +181,7 @@ export const handlers = [
   }),
 
   http.post("/api/v1/trainees", async ({ request }) => {
-    const body = await request.json();
+    const body = /** @type {Record<string, any>} */ (await request.json());
     const newTrainee = {
       id: Date.now(),
       fullName: body.fullName,
@@ -143,7 +190,7 @@ export const handlers = [
       consentGiven: body.consentGiven ?? true,
       allowEmails: body.allowEmails ?? true,
       adminStoppedEmail: false,
-      employmentStatus: body.employmentStatus || "SEEKING",
+      employmentStatus: body.employmentStatus || "UNEMPLOYED",
       companyName: body.companyName || "",
       currentRole: body.currentRole || "",
       currentSalary: body.currentSalary || null,
@@ -155,6 +202,7 @@ export const handlers = [
       certifications: [],
       enrolledCourses: [],
       completedCourses: [],
+      followUpResponded: body.followUpResponded ?? false,
       followUpNotes: [],
     };
     trainees.unshift(newTrainee);
@@ -163,7 +211,7 @@ export const handlers = [
 
   http.put("/api/v1/trainees/:id", async ({ params, request }) => {
     const id = Number(params.id);
-    const body = await request.json();
+    const body = /** @type {Record<string, any>} */ (await request.json());
     const idx = trainees.findIndex((t) => t.id === id);
     if (idx !== -1) {
       trainees[idx] = { ...trainees[idx], ...body, id };
@@ -265,7 +313,7 @@ export const handlers = [
   }),
 
   http.get("/api/v1/courses/skills-summary", () => {
-    return envelope(skillsSummary);
+    return envelope(buildDynamicSkillsSummary());
   }),
 
   // --- Providers ---
@@ -286,12 +334,13 @@ export const handlers = [
 
   http.post("/api/v1/providers/:providerId/courses", async ({ params, request }) => {
     const providerId = Number(params.providerId);
-    const body = await request.json();
+    const body = /** @type {Record<string, any>} */ (await request.json());
     const provider = providers.find((p) => p.id === providerId);
     const newCourse = {
       id: Date.now(),
       title: body.title,
       description: body.description || "",
+      category: body.category || deriveCourseCategory(body.skillsTaught),
       providerId,
       providerName: provider ? provider.name : "Provider",
       skillsTaught: body.skillsTaught || [],
@@ -302,10 +351,15 @@ export const handlers = [
 
   http.put("/api/v1/providers/courses/:courseId", async ({ params, request }) => {
     const courseId = Number(params.courseId);
-    const body = await request.json();
+    const body = /** @type {Record<string, any>} */ (await request.json());
     const idx = courses.findIndex((c) => c.id === courseId);
     if (idx !== -1) {
-      courses[idx] = { ...courses[idx], ...body, id: courseId };
+      courses[idx] = {
+        ...courses[idx],
+        ...body,
+        id: courseId,
+        category: body.category || courses[idx].category || deriveCourseCategory(body.skillsTaught),
+      };
       return envelope(courses[idx], "Course updated successfully");
     }
     return HttpResponse.json({ success: false, message: "Course not found" }, { status: 404 });
@@ -331,6 +385,9 @@ export const handlers = [
   // --- Email ---
   http.post("/api/v1/email/trigger-quarterly-reminders", () => {
     const eligible = trainees.filter((t) => t.consentGiven && t.allowEmails && !t.adminStoppedEmail).length;
-    return envelope(`Quarterly update reminders sent: ${eligible} emails queued.`, "Quarterly reminders triggered");
+    return envelope(
+      `Quarterly update reminders sent: ${eligible} emails queued.`,
+      "Quarterly reminders triggered"
+    );
   }),
 ];

@@ -1,48 +1,116 @@
-import { Menu as BaseMenu } from "@base-ui/react/menu";
+import { Children, cloneElement, isValidElement } from "react";
+import {
+  Menu as BpMenu,
+  MenuDivider as BpMenuDivider,
+  MenuItem as BpMenuItem,
+  PopoverNext,
+} from "@blueprintjs/core";
 
-export function Menu({ children, open, onOpenChange, ...props }) {
+const placementMap = {
+  start: "bottom-start",
+  center: "bottom",
+  end: "bottom-end",
+};
+
+/** @param {{ children?: any }} props */
+export function Menu({ children }) {
+  let trigger = /** @type {any} */ (null);
+  let content = /** @type {any} */ (null);
+
+  Children.forEach(children, (child) => {
+    if (!isValidElement(child)) return;
+    if (child.type === MenuTrigger) trigger = child;
+    if (child.type === MenuContent) content = child;
+  });
+
+  const placement = content?.props?.align
+    ? placementMap[content.props.align] || "bottom-end"
+    : "bottom-end";
+
+  const popoverMenu = content ? (
+    <BpMenu className={content.props.className}>{content.props.children}</BpMenu>
+  ) : undefined;
+
   return (
-    <BaseMenu.Root open={open} onOpenChange={onOpenChange} {...props}>
-      {children}
-    </BaseMenu.Root>
+    <PopoverNext
+      content={popoverMenu}
+      placement={placement}
+      arrow={false}
+      middleware={{ offset: { mainAxis: 4 } }}
+      animation="minimal"
+      transitionDuration={0}
+      shouldReturnFocusOnClose={false}
+      popupKind={/** @type {any} */ ("menu")}
+      renderTarget={({ isOpen: _isOpen, className: targetClassName, ref, ...targetProps }) => {
+        if (!trigger) return null;
+        const rendered =
+          typeof trigger.props.render === "function"
+            ? trigger.props.render({ ...targetProps, ref })
+            : isValidElement(trigger.props.render)
+              ? cloneElement(trigger.props.render, {
+                  ...targetProps,
+                  ref,
+                  children: trigger.props.children ?? trigger.props.render.props?.children,
+                })
+              : (
+                <button
+                  type="button"
+                  ref={ref}
+                  {...targetProps}
+                  className={trigger.props.className}
+                >
+                  {trigger.props.children}
+                </button>
+              );
+
+        if (!isValidElement(rendered)) return rendered;
+        const mergedClassName = [targetClassName, rendered.props?.className]
+          .filter(Boolean)
+          .join(" ");
+        return cloneElement(rendered, { className: mergedClassName });
+      }}
+    />
   );
 }
 
-export const MenuTrigger = BaseMenu.Trigger;
-
-export function MenuContent({ children, className = "", side = "bottom", align = "end", ...props }) {
-  return (
-    <BaseMenu.Portal>
-      <BaseMenu.Positioner side={side} align={align} sideOffset={6} className="z-50 outline-none select-none">
-        <BaseMenu.Popup
-          className={`min-w-48 rounded-md bg-white p-1 text-gray-900 shadow-lg shadow-gray-200/70 outline-1 outline-gray-200 dark:bg-gray-900 dark:text-gray-50 dark:shadow-black/50 dark:outline-gray-800 ${className}`}
-          {...props}
-        >
-          {children}
-        </BaseMenu.Popup>
-      </BaseMenu.Positioner>
-    </BaseMenu.Portal>
-  );
+/** @param {{ render?: any, children?: any }} [_props] */
+export function MenuTrigger(_props) {
+  return null;
 }
 
-export function MenuItem({ children, className = "", onClick, disabled, ...props }) {
+/** @param {{ children?: any, align?: string, side?: string, className?: string }} [_props] */
+export function MenuContent(_props) {
+  return null;
+}
+
+/** @param {{ children?: any, icon?: any, active?: boolean, disabled?: boolean, intent?: any, onClick?: (e: any) => void, className?: string, [key: string]: any }} props */
+export function MenuItem({
+  children,
+  onClick,
+  className = "",
+  disabled = false,
+  intent,
+  icon,
+  labelElement,
+  active = false,
+  ...props
+}) {
   return (
-    <BaseMenu.Item
+    <BpMenuItem
+      text={children}
+      icon={icon}
+      labelElement={labelElement}
+      active={active}
       disabled={disabled}
+      intent={intent}
       onClick={onClick}
-      className={`flex items-center gap-2 rounded-sm px-2.5 py-1.5 text-xs font-medium text-gray-700 outline-none select-none cursor-default data-[highlighted]:bg-gray-100 data-[highlighted]:text-gray-900 disabled:opacity-50 disabled:cursor-not-allowed dark:text-gray-300 dark:data-[highlighted]:bg-gray-800 dark:data-[highlighted]:text-gray-50 ${className}`}
-      {...props}
-    >
-      {children}
-    </BaseMenu.Item>
-  );
-}
-
-export function MenuSeparator({ className = "", ...props }) {
-  return (
-    <BaseMenu.Separator
-      className={`my-1 h-px bg-gray-200 dark:bg-gray-800 ${className}`}
+      className={className}
       {...props}
     />
   );
+}
+
+/** @param {{ title?: string, className?: string }} props */
+export function MenuSeparator({ title, className = "" }) {
+  return <BpMenuDivider title={title} className={className} />;
 }

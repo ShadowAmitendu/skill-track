@@ -20,7 +20,7 @@ import { apiClient } from "./client";
  * @property {boolean} consentGiven
  * @property {boolean} allowEmails
  * @property {boolean} adminStoppedEmail
- * @property {"EMPLOYED"|"UNEMPLOYED"|"SEEKING"} employmentStatus
+ * @property {"EMPLOYED"|"UNEMPLOYED"|"SEEKING"|"FULL_TIME"|"PART_TIME"|"INTERNSHIP"|"SELF_EMPLOYED"} employmentStatus
  * @property {string} [companyName]
  * @property {string} [currentRole]
  * @property {number|null} [currentSalary]
@@ -33,6 +33,7 @@ import { apiClient } from "./client";
  * @property {string[]} enrolledCourses
  * @property {string[]} completedCourses
  * @property {string[]} followUpNotes
+ * @property {boolean} [followUpResponded]
  */
 
 /**
@@ -42,7 +43,7 @@ import { apiClient } from "./client";
  * @property {string} [phoneNumber]
  * @property {boolean} [consentGiven]
  * @property {boolean} [allowEmails]
- * @property {"EMPLOYED"|"UNEMPLOYED"|"SEEKING"} [employmentStatus]
+ * @property {"EMPLOYED"|"UNEMPLOYED"|"SEEKING"|"FULL_TIME"|"PART_TIME"|"INTERNSHIP"|"SELF_EMPLOYED"} [employmentStatus]
  * @property {string} [companyName]
  * @property {string} [currentRole]
  * @property {number} [currentSalary]
@@ -57,6 +58,7 @@ import { apiClient } from "./client";
  * @property {number} id
  * @property {string} title
  * @property {string} description
+ * @property {string} category
  * @property {number} providerId
  * @property {string} providerName
  * @property {string[]} skillsTaught
@@ -91,6 +93,7 @@ export const adminApi = {
   getAllProviders: (signal) => apiClient("/admin/providers", { signal }),
   addCourseProvider: (dto) => apiClient("/admin/providers", { method: "POST", body: dto }),
   updateCourseProvider: (id, dto) => apiClient(`/admin/providers/${id}`, { method: "PUT", body: dto }),
+  removeCourseProvider: (id) => apiClient(`/admin/providers/${id}`, { method: "DELETE" }),
   stopEmails: (traineeId, stop) =>
     apiClient(`/admin/trainees/${traineeId}/stop-emails?stop=${Boolean(stop)}`, {
       method: "PATCH",

@@ -22,11 +22,13 @@ import {
   ResponsiveContainer,
   Cell,
 } from "recharts";
-import { Card, CardHeader, CardTitle, CardContent } from "../ui/Card";
+import { ButtonGroup, EntityTitle, H2 } from "@blueprintjs/core";
+import { Card, Section, SectionCard, CardList } from "../ui/Card";
 import { Badge } from "../ui/Badge";
 import { Button } from "../ui/Button";
 import { Progress } from "../ui/Progress";
 import { LoadingState, ErrorState, EmptyState } from "../ui/QueryState";
+import { EMPLOYMENT_STATUS_OPTIONS, normalizeEmploymentStatus } from "../../utils/domain";
 
 export function ProviderDashboardBoard() {
   const { user } = useAuth();
@@ -102,11 +104,25 @@ export function ProviderDashboardBoard() {
     const totalSeats = totalActive + totalCompleted;
     const completionRate = totalSeats > 0 ? Math.round((totalCompleted / totalSeats) * 100) : 0;
 
-    const employedCount = cohortTrainees.filter((t) => t.employmentStatus === "EMPLOYED").length;
-    const seekingCount = cohortTrainees.filter((t) => t.employmentStatus === "SEEKING").length;
-    const unemployedCount = cohortTrainees.filter(
-      (t) => t.employmentStatus === "UNEMPLOYED"
-    ).length;
+    const statusCounts = {
+      FULL_TIME: 0,
+      PART_TIME: 0,
+      INTERNSHIP: 0,
+      SELF_EMPLOYED: 0,
+      UNEMPLOYED: 0,
+    };
+    cohortTrainees.forEach((t) => {
+      const normalized = normalizeEmploymentStatus(t.employmentStatus);
+      statusCounts[normalized] = (statusCounts[normalized] || 0) + 1;
+    });
+
+    const colors = {
+      FULL_TIME: isDark ? "#32a467" : "#238551",
+      PART_TIME: isDark ? "#4c90f0" : "#2d72d2",
+      INTERNSHIP: isDark ? "#ec9a3c" : "#c87619",
+      SELF_EMPLOYED: isDark ? "#2ee6d6" : "#008075",
+      UNEMPLOYED: isDark ? "#e76a6e" : "#cd4246",
+    };
 
     return {
       uniqueSkillsCount: uniqueSkills.size,
@@ -115,14 +131,12 @@ export function ProviderDashboardBoard() {
       completionRate,
       cohortCount: cohortTrainees.length,
       perCourse,
-      employmentData: [
-        { name: "Employed", count: employedCount, color: isDark ? "#F9FAFB" : "#111827" },
-        { name: "Seeking", count: seekingCount, color: isDark ? "#9CA3AF" : "#4B5563" },
-        { name: "Unemployed", count: unemployedCount, color: isDark ? "#6B7280" : "#9CA3AF" },
-      ],
-      employedCount,
-      seekingCount,
-      unemployedCount,
+      employmentData: EMPLOYMENT_STATUS_OPTIONS.map((opt) => ({
+        name: opt.label,
+        count: statusCounts[opt.value] || 0,
+        color: colors[opt.value],
+      })),
+      statusCounts,
     };
   }, [myCourses, trainees, isDark]);
 
@@ -147,130 +161,83 @@ export function ProviderDashboardBoard() {
     <div className="space-y-5">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-50">
-            Course Provider Dashboard
-          </h1>
-          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+          <H2 className="!mb-0">Course Provider Dashboard</H2>
+          <p className="bp6-text-muted text-xs mt-1">
             {provider?.name || user?.name} — course activity, trainee completions, and cohort outcomes.
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
+        <ButtonGroup>
           <Link to={`/providers/${providerId}`}>
-            <Button variant="outline" size="sm">
-              <Building2 size={14} /> Provider Profile
+            <Button variant="outline" icon={<Building2 size={14} />}>
+              Provider Profile
             </Button>
           </Link>
           <Link to={`/courses?provider=${providerId}`}>
-            <Button variant="primary" size="sm">
-              <GraduationCap size={14} /> Manage My Courses
+            <Button variant="primary" icon={<GraduationCap size={14} />}>
+              Manage My Courses
             </Button>
           </Link>
-        </div>
+        </ButtonGroup>
       </div>
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Link to={`/courses?provider=${providerId}`} className="group block">
-          <Card className="group-hover:border-gray-400 dark:group-hover:border-gray-600 h-full">
-            <CardContent className="p-5 flex items-center justify-between gap-3">
-              <div>
-                <p className="text-xs text-gray-500 dark:text-gray-400 font-medium">
-                  Published Courses
-                </p>
-                <p className="text-2xl font-semibold text-gray-900 dark:text-gray-50 mt-1 tabular-nums">
-                  {myCourses.length}
-                </p>
-                <span className="text-xs text-gray-600 dark:text-gray-400 group-hover:underline mt-1 inline-block">
-                  Open catalog &rarr;
-                </span>
-              </div>
-              <div className="w-10 h-10 rounded-md bg-gray-100 border border-gray-200 text-gray-800 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-200 flex items-center justify-center shrink-0">
-                <GraduationCap size={18} />
-              </div>
-            </CardContent>
+        <Link to={`/courses?provider=${providerId}`} className="block">
+          <Card interactive className="h-full">
+            <EntityTitle
+              icon={<GraduationCap size={18} className="bp6-text-muted" />}
+              title="Published Courses"
+              subtitle="Open catalog →"
+            />
+            <H2 className="!mb-0 !mt-3 tabular-nums">{myCourses.length}</H2>
           </Card>
         </Link>
 
-        <Link to="/trainees" className="group block">
-          <Card className="group-hover:border-gray-400 dark:group-hover:border-gray-600 h-full">
-            <CardContent className="p-5 flex items-center justify-between gap-3">
-              <div>
-                <p className="text-xs text-gray-500 dark:text-gray-400 font-medium">
-                  Cohort Trainees
-                </p>
-                <p className="text-2xl font-semibold text-gray-900 dark:text-gray-50 mt-1 tabular-nums">
-                  {analytics.cohortCount}
-                </p>
-                <span className="text-xs text-gray-600 dark:text-gray-400 group-hover:underline mt-1 inline-block">
-                  {analytics.totalActive} active seats &rarr;
-                </span>
-              </div>
-              <div className="w-10 h-10 rounded-md bg-gray-100 border border-gray-200 text-gray-800 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-200 flex items-center justify-center shrink-0">
-                <Users size={18} />
-              </div>
-            </CardContent>
+        <Link to="/trainees" className="block">
+          <Card interactive className="h-full">
+            <EntityTitle
+              icon={<Users size={18} className="bp6-text-muted" />}
+              title="Cohort Trainees"
+              subtitle={`${analytics.totalActive} active seats →`}
+            />
+            <H2 className="!mb-0 !mt-3 tabular-nums">{analytics.cohortCount}</H2>
           </Card>
         </Link>
 
         <Card className="h-full">
-          <CardContent className="p-5 space-y-2.5">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="text-xs text-gray-500 dark:text-gray-400 font-medium">
-                  Completion Rate
-                </p>
-                <p className="text-2xl font-semibold text-gray-900 dark:text-gray-50 mt-1 tabular-nums">
-                  {analytics.completionRate}%
-                </p>
-              </div>
-              <div className="w-10 h-10 rounded-md bg-gray-100 border border-gray-200 text-gray-800 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-200 flex items-center justify-center shrink-0">
-                <CheckCircle2 size={18} />
-              </div>
-            </div>
-            <Progress value={analytics.completionRate} />
-            <p className="text-xs text-gray-500 dark:text-gray-400">
-              {analytics.totalCompleted} completed course outcomes
-            </p>
-          </CardContent>
+          <EntityTitle
+            icon={<CheckCircle2 size={18} className="bp6-text-muted" />}
+            title="Completion Rate"
+            subtitle={`${analytics.totalCompleted} completed outcomes`}
+          />
+          <div className="mt-3 space-y-2">
+            <H2 className="!mb-0 tabular-nums">{analytics.completionRate}%</H2>
+            <Progress value={analytics.completionRate} variant="success" />
+          </div>
         </Card>
 
-        <Link to="/skills" className="group block">
-          <Card className="group-hover:border-gray-400 dark:group-hover:border-gray-600 h-full">
-            <CardContent className="p-5 flex items-center justify-between gap-3">
-              <div>
-                <p className="text-xs text-gray-500 dark:text-gray-400 font-medium">
-                  Skills Covered
-                </p>
-                <p className="text-2xl font-semibold text-gray-900 dark:text-gray-50 mt-1 tabular-nums">
-                  {analytics.uniqueSkillsCount}
-                </p>
-                <span className="text-xs text-gray-600 dark:text-gray-400 group-hover:underline mt-1 inline-block">
-                  Inspect skills &rarr;
-                </span>
-              </div>
-              <div className="w-10 h-10 rounded-md bg-gray-100 border border-gray-200 text-gray-800 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-200 flex items-center justify-center shrink-0">
-                <Award size={18} />
-              </div>
-            </CardContent>
+        <Link to="/skills" className="block">
+          <Card interactive className="h-full">
+            <EntityTitle
+              icon={<Award size={18} className="bp6-text-muted" />}
+              title="Skills Covered"
+              subtitle="Inspect skills →"
+            />
+            <H2 className="!mb-0 !mt-3 tabular-nums">{analytics.uniqueSkillsCount}</H2>
           </Card>
         </Link>
       </div>
 
       {/* Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <GraduationCap size={16} /> Enrollments by Course
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
+        <Section title="Enrollments by Course" icon={<GraduationCap size={16} />}>
+          <SectionCard>
             {analytics.perCourse.length === 0 ? (
               <EmptyState
-                icon={GraduationCap}
+                icon={<GraduationCap size={28} />}
                 title="No courses published yet"
-                description="Publish a course from Courses & Providers to track trainee enrollments."
+                description="Publish a course from My Courses to track trainee enrollments."
               />
             ) : (
               <div className="h-64 w-full">
@@ -281,50 +248,45 @@ export function ProviderDashboardBoard() {
                   >
                     <XAxis
                       dataKey="shortTitle"
-                      tick={{ fontSize: 11, fill: isDark ? "#9CA3AF" : "#4B5563" }}
-                      stroke={isDark ? "#374151" : "#E5E7EB"}
+                      tick={{ fontSize: 11, fill: isDark ? "#abb3bf" : "#5f6b7c" }}
+                      stroke={isDark ? "#404854" : "#dce0e5"}
                     />
                     <YAxis
                       allowDecimals={false}
-                      tick={{ fontSize: 12, fill: isDark ? "#9CA3AF" : "#4B5563" }}
-                      stroke={isDark ? "#374151" : "#E5E7EB"}
+                      tick={{ fontSize: 12, fill: isDark ? "#abb3bf" : "#5f6b7c" }}
+                      stroke={isDark ? "#404854" : "#dce0e5"}
                     />
                     <RechartsTooltip
                       cursor={{ fill: isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)" }}
                       contentStyle={{
-                        backgroundColor: isDark ? "#111827" : "#FFFFFF",
-                        borderColor: isDark ? "#1F2937" : "#E5E7EB",
-                        color: isDark ? "#F9FAFB" : "#111827",
-                        borderRadius: "6px",
+                        backgroundColor: isDark ? "#252a31" : "#ffffff",
+                        borderColor: isDark ? "#404854" : "#dce0e5",
+                        color: isDark ? "#f6f7f9" : "#1c2127",
+                        borderRadius: "4px",
                         fontSize: "12px",
                       }}
                     />
                     <Bar
                       dataKey="enrolled"
                       name="Active Enrolled"
-                      fill={isDark ? "#9CA3AF" : "#6B7280"}
+                      fill={isDark ? "#abb3bf" : "#5f6b7c"}
                       radius={[4, 4, 0, 0]}
                     />
                     <Bar
                       dataKey="completed"
                       name="Completed"
-                      fill={isDark ? "#F9FAFB" : "#111827"}
+                      fill={isDark ? "#4c90f0" : "#2d72d2"}
                       radius={[4, 4, 0, 0]}
                     />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
             )}
-          </CardContent>
-        </Card>
+          </SectionCard>
+        </Section>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <BriefcaseBusiness size={16} /> Cohort Employment Outcomes
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
+        <Section title="Cohort Employment Outcomes" icon={<BriefcaseBusiness size={16} />}>
+          <SectionCard>
             <div className="h-64 w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart
@@ -333,21 +295,21 @@ export function ProviderDashboardBoard() {
                 >
                   <XAxis
                     dataKey="name"
-                    tick={{ fontSize: 12, fill: isDark ? "#9CA3AF" : "#4B5563" }}
-                    stroke={isDark ? "#374151" : "#E5E7EB"}
+                    tick={{ fontSize: 12, fill: isDark ? "#abb3bf" : "#5f6b7c" }}
+                    stroke={isDark ? "#404854" : "#dce0e5"}
                   />
                   <YAxis
                     allowDecimals={false}
-                    tick={{ fontSize: 12, fill: isDark ? "#9CA3AF" : "#4B5563" }}
-                    stroke={isDark ? "#374151" : "#E5E7EB"}
+                    tick={{ fontSize: 12, fill: isDark ? "#abb3bf" : "#5f6b7c" }}
+                    stroke={isDark ? "#404854" : "#dce0e5"}
                   />
                   <RechartsTooltip
                     cursor={{ fill: isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)" }}
                     contentStyle={{
-                      backgroundColor: isDark ? "#111827" : "#FFFFFF",
-                      borderColor: isDark ? "#1F2937" : "#E5E7EB",
-                      color: isDark ? "#F9FAFB" : "#111827",
-                      borderRadius: "6px",
+                      backgroundColor: isDark ? "#252a31" : "#ffffff",
+                      borderColor: isDark ? "#404854" : "#dce0e5",
+                      color: isDark ? "#f6f7f9" : "#1c2127",
+                      borderRadius: "4px",
                       fontSize: "12px",
                     }}
                   />
@@ -359,71 +321,52 @@ export function ProviderDashboardBoard() {
                 </BarChart>
               </ResponsiveContainer>
             </div>
-            <div className="grid grid-cols-3 gap-2 mt-4 pt-3 border-t border-gray-200 dark:border-gray-800 text-center text-xs">
-              <Link
-                to="/employment?status=EMPLOYED"
-                className="hover:bg-gray-50 dark:hover:bg-gray-800/70 rounded-md py-1"
-              >
-                <span className="text-gray-500 dark:text-gray-400 block">Employed</span>
-                <span className="font-semibold text-gray-900 dark:text-gray-50 tabular-nums">
-                  {analytics.employedCount}
+          </SectionCard>
+          <SectionCard compact className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-center text-xs">
+            {EMPLOYMENT_STATUS_OPTIONS.map((opt) => (
+              <Link key={opt.value} to={`/employment?status=${opt.value}`} className="block">
+                <span className="bp6-text-muted block truncate">{opt.label}</span>
+                <span className="font-semibold tabular-nums text-sm">
+                  {analytics.statusCounts[opt.value] || 0}
                 </span>
               </Link>
-              <Link
-                to="/employment?status=SEEKING"
-                className="hover:bg-gray-50 dark:hover:bg-gray-800/70 rounded-md py-1"
-              >
-                <span className="text-gray-500 dark:text-gray-400 block">Seeking</span>
-                <span className="font-semibold text-gray-900 dark:text-gray-50 tabular-nums">
-                  {analytics.seekingCount}
-                </span>
-              </Link>
-              <Link
-                to="/employment?status=UNEMPLOYED"
-                className="hover:bg-gray-50 dark:hover:bg-gray-800/70 rounded-md py-1"
-              >
-                <span className="text-gray-500 dark:text-gray-400 block">Unemployed</span>
-                <span className="font-semibold text-gray-900 dark:text-gray-50 tabular-nums">
-                  {analytics.unemployedCount}
-                </span>
-              </Link>
-            </div>
-          </CardContent>
-        </Card>
+            ))}
+          </SectionCard>
+        </Section>
       </div>
 
       {/* Published Courses List */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <GraduationCap size={16} /> My Published Courses ({myCourses.length})
-          </CardTitle>
-          <Link
-            to="/trainees"
-            className="text-xs font-medium text-gray-700 hover:text-gray-900 dark:text-gray-300 dark:hover:text-gray-50 inline-flex items-center gap-1"
-          >
-            Read-only Trainee Directory <ArrowRight size={13} />
+      <Section
+        title={`My Published Courses (${myCourses.length})`}
+        icon={<GraduationCap size={16} />}
+        rightElement={
+          <Link to="/trainees">
+            <Button variant="minimal" size="sm" endIcon={<ArrowRight size={13} />}>
+              Read-only Trainee Directory
+            </Button>
           </Link>
-        </CardHeader>
-        <CardContent>
-          {analytics.perCourse.length === 0 ? (
-            <p className="text-xs text-gray-500 dark:text-gray-400 py-4 text-center">
+        }
+      >
+        {analytics.perCourse.length === 0 ? (
+          <SectionCard>
+            <p className="text-xs bp6-text-muted py-4 text-center">
               No courses associated with this provider account yet.
             </p>
-          ) : (
-            <div className="divide-y divide-gray-200 dark:divide-gray-800">
+          </SectionCard>
+        ) : (
+          <SectionCard padded={false}>
+            <CardList bordered={false}>
               {analytics.perCourse.map((course) => (
-                <div
+                <Card
                   key={course.id}
-                  className="py-3 first:pt-0 last:pb-0 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                  compact
+                  className="flex flex-col sm:flex-row sm:items-center justify-between gap-3"
                 >
                   <div className="min-w-0">
-                    <p className="text-sm font-medium text-gray-900 dark:text-gray-50 truncate">
-                      {course.title}
-                    </p>
+                    <div className="text-sm font-medium truncate">{course.title}</div>
                     <div className="flex flex-wrap gap-1.5 mt-1.5">
                       {course.skillsTaught.map((skill) => (
-                        <Badge key={skill} variant="neutral">
+                        <Badge key={skill} variant="secondary">
                           {skill}
                         </Badge>
                       ))}
@@ -431,14 +374,14 @@ export function ProviderDashboardBoard() {
                   </div>
                   <div className="flex items-center gap-2 shrink-0 text-xs">
                     <Badge variant="outline">{course.enrolled} enrolled</Badge>
-                    <Badge variant="emerald">{course.completed} completed</Badge>
+                    <Badge variant="success">{course.completed} completed</Badge>
                   </div>
-                </div>
+                </Card>
               ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+            </CardList>
+          </SectionCard>
+        )}
+      </Section>
     </div>
   );
 }

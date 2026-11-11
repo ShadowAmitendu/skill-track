@@ -50,17 +50,99 @@ export function AuthProvider({ children }) {
   }, []);
 
   /**
-   * Login by verifying email against existing backend records (or VITE_ADMIN_EMAIL for Admin).
+   * Unified login: verifies email & password (client-side UI boundary while backend has no password auth)
+   * against VITE_ADMIN_EMAIL, registered trainees, or registered providers.
+   * Accepts an optional role hint when explicitly specified, or auto-resolves across all roles.
    */
-  const login = useCallback(async ({ email, role }) => {
-    const cleanEmail = email.trim().toLowerCase();
+  const login = useCallback(async ({ email, password, role }) => {
+    const cleanInput = (email || "").trim().toLowerCase();
     const adminEmail = (import.meta.env.VITE_ADMIN_EMAIL || "admin@skilltrack.com").toLowerCase();
+    const adminPassword = import.meta.env.VITE_ADMIN_PASSWORD;
 
-    if (role === "ADMIN") {
-      if (cleanEmail === adminEmail) {
+    if (!cleanInput) {
+      throw new Error("Please enter your Mail ID or User ID.");
+    }
+    if (!password || !password.trim()) {
+      throw new Error("Please enter your password.");
+    }
+
+    const matchesAdmin =
+      cleanInput === adminEmail || cleanInput === "admin" || cleanInput === "0";
+
+    if (!role) {
+      if (matchesAdmin) {
+        if (adminPassword && password !== adminPassword) {
+          throw new Error("Invalid password for Administrator account.");
+        }
         const adminSession = {
           role: "ADMIN",
-          user: { id: 0, name: "System Administrator", email: cleanEmail },
+          user: { id: 0, name: "System Administrator", email: adminEmail },
+          isAuthenticated: true,
+        };
+        setSession(adminSession);
+        return adminSession;
+      }
+
+      const [trainees, providers] = await Promise.all([
+        traineeApi.getAll(),
+        providerApi.getAll(),
+      ]);
+
+      const traineeMatch = (trainees || []).find(
+        (t) =>
+          (t.email && t.email.trim().toLowerCase() === cleanInput) ||
+          cleanInput === `t-${t.id}` ||
+          cleanInput === `trainee-${t.id}`
+      );
+      if (traineeMatch) {
+        const traineeSession = {
+          role: "TRAINEE",
+          user: {
+            id: traineeMatch.id,
+            name: traineeMatch.fullName,
+            email: traineeMatch.email,
+            details: traineeMatch,
+          },
+          isAuthenticated: true,
+        };
+        setSession(traineeSession);
+        return traineeSession;
+      }
+
+      const providerMatch = (providers || []).find(
+        (p) =>
+          (p.contactEmail && p.contactEmail.trim().toLowerCase() === cleanInput) ||
+          cleanInput === `p-${p.id}` ||
+          cleanInput === `provider-${p.id}`
+      );
+      if (providerMatch) {
+        const providerSession = {
+          role: "COURSE_PROVIDER",
+          user: {
+            id: providerMatch.id,
+            name: providerMatch.name,
+            email: providerMatch.contactEmail,
+            details: providerMatch,
+          },
+          isAuthenticated: true,
+        };
+        setSession(providerSession);
+        return providerSession;
+      }
+
+      throw new Error(
+        `No account found matching "${email}". Check your Mail ID / User ID or register first.`
+      );
+    }
+
+    if (role === "ADMIN") {
+      if (matchesAdmin) {
+        if (adminPassword && password !== adminPassword) {
+          throw new Error("Invalid password for Administrator account.");
+        }
+        const adminSession = {
+          role: "ADMIN",
+          user: { id: 0, name: "System Administrator", email: adminEmail },
           isAuthenticated: true,
         };
         setSession(adminSession);
@@ -72,7 +154,10 @@ export function AuthProvider({ children }) {
     if (role === "TRAINEE") {
       const trainees = await traineeApi.getAll();
       const match = (trainees || []).find(
-        (t) => t.email && t.email.trim().toLowerCase() === cleanEmail
+        (t) =>
+          (t.email && t.email.trim().toLowerCase() === cleanInput) ||
+          cleanInput === `t-${t.id}` ||
+          cleanInput === `trainee-${t.id}`
       );
       if (!match) {
         throw new Error(`No trainee found registered with email "${email}". Please register first.`);
@@ -89,11 +174,14 @@ export function AuthProvider({ children }) {
     if (role === "COURSE_PROVIDER") {
       const providers = await providerApi.getAll();
       const match = (providers || []).find(
-        (p) => p.contactEmail && p.contactEmail.trim().toLowerCase() === cleanEmail
+        (p) =>
+          (p.contactEmail && p.contactEmail.trim().toLowerCase() === cleanInput) ||
+          cleanInput === `p-${p.id}` ||
+          cleanInput === `provider-${p.id}`
       );
       if (!match) {
         throw new Error(
-          `No course provider found with email "${email}". Please register as a Course Provider.`
+          `No course provider found with email or ID "${email}". Please register as a Course Provider.`
         );
       }
       const providerSession = {

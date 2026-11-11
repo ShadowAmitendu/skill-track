@@ -1,53 +1,80 @@
 import { forwardRef } from "react";
-import { Button as BaseButton } from "@base-ui/react/button";
+import { Button as BpButton, Intent } from "@blueprintjs/core";
 
-const variants = {
-  primary:
-    "bg-gray-900 text-gray-50 hover:bg-gray-800 active:bg-gray-950 border border-gray-900 dark:bg-gray-100 dark:text-gray-950 dark:hover:bg-white dark:active:bg-gray-200 dark:border-gray-100",
-  secondary:
-    "bg-gray-100 text-gray-900 hover:bg-gray-200 active:bg-gray-200 border border-gray-200 dark:bg-gray-800 dark:text-gray-100 dark:hover:bg-gray-700 dark:active:bg-gray-700 dark:border-gray-700",
-  outline:
-    "border border-gray-200 bg-white text-gray-900 hover:bg-gray-100 active:bg-gray-100 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800 dark:active:bg-gray-800",
-  danger:
-    "bg-red-700 text-white hover:bg-red-800 active:bg-red-900 border border-red-700 dark:bg-red-600 dark:hover:bg-red-700 dark:active:bg-red-800 dark:border-red-600",
-  ghost:
-    "bg-transparent text-gray-600 hover:bg-gray-100 hover:text-gray-900 active:bg-gray-200 border border-transparent dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-50 dark:active:bg-gray-800",
-  success:
-    "bg-gray-900 text-gray-50 hover:bg-gray-800 active:bg-gray-950 border border-gray-900 dark:bg-gray-100 dark:text-gray-950 dark:hover:bg-white dark:active:bg-gray-200 dark:border-gray-100",
+const variantConfig = {
+  primary: { variant: "solid", intent: Intent.PRIMARY },
+  secondary: { variant: "solid", intent: Intent.NONE },
+  outline: { variant: "outlined", intent: Intent.NONE },
+  outlined: { variant: "outlined", intent: Intent.NONE },
+  danger: { variant: "solid", intent: Intent.DANGER },
+  ghost: { variant: "minimal", intent: Intent.NONE },
+  minimal: { variant: "minimal", intent: Intent.NONE },
+  solid: { variant: "solid", intent: Intent.NONE },
+  success: { variant: "solid", intent: Intent.SUCCESS },
 };
 
-const sizes = {
-  sm: "h-8 px-2.5 text-xs rounded-md gap-1.5",
-  md: "h-9 px-3.5 text-sm rounded-md gap-2",
-  lg: "h-10 px-4 text-sm rounded-md gap-2",
-  icon: "h-9 w-9 p-0 rounded-md",
+const sizeMap = {
+  sm: "small",
+  md: "medium",
+  lg: "large",
+  icon: "medium",
 };
 
-export const Button = forwardRef(function Button(
-  {
-    children,
-    variant = "primary",
-    size = "md",
-    className = "",
-    disabled = false,
-    loading = false,
-    type = "button",
-    ...props
-  },
-  ref
-) {
+/**
+ * @typedef {object} ButtonProps
+ * @property {any} [children]
+ * @property {"primary"|"secondary"|"outlined"|"outline"|"minimal"|"ghost"|"danger"|"success"} [variant]
+ * @property {any} [intent]
+ * @property {"sm"|"md"|"lg"|"xs"} [size]
+ * @property {string} [className]
+ * @property {boolean} [disabled]
+ * @property {boolean} [loading]
+ * @property {"button"|"submit"|"reset"} [type]
+ * @property {any} [icon]
+ * @property {any} [endIcon]
+ * @property {boolean} [active]
+ * @property {boolean} [fill]
+ * @property {"start"|"center"|"end"} [alignText]
+ * @property {(e: any) => void} [onClick]
+ * @property {string} [title]
+ */
+
+/** @type {import("react").ForwardRefExoticComponent<ButtonProps & Record<string, any> & import("react").RefAttributes<any>>} */
+export const Button = forwardRef(
+  /**
+   * @param {ButtonProps & Record<string, any>} props
+   * @param {import("react").Ref<any>} ref
+   */
+  function Button(
+    {
+      children,
+      variant = "primary",
+      intent,
+      size = "md",
+      className = "",
+      disabled = false,
+      loading = false,
+      type = "button",
+      ...props
+    },
+    ref
+  ) {
+  const mappedVariant = variantConfig[variant] || variantConfig.primary;
+  const mappedSize = sizeMap[size] || "medium";
   return (
-    <BaseButton
+    <BpButton
       ref={ref}
       type={type}
+      variant={/** @type {any} */ (mappedVariant.variant)}
+      intent={intent ?? mappedVariant.intent}
+      size={mappedSize}
       disabled={disabled || loading}
-      className={`inline-flex items-center justify-center font-medium select-none cursor-pointer outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gray-900 dark:focus-visible:outline-gray-100 disabled:opacity-50 disabled:cursor-not-allowed ${
-        variants[variant] || variants.primary
-      } ${sizes[size] || sizes.md} ${className}`}
+      loading={loading}
+      className={className}
       {...props}
     >
       {children}
-      {loading && <span className="ml-1 text-xs opacity-80">...</span>}
-    </BaseButton>
+    </BpButton>
   );
-});
+  }
+);

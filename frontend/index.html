@@ -10,12 +10,15 @@
         var t = localStorage.getItem("skilltrack_theme");
         var prefersDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
         if (t === "dark" || (!t && prefersDark)) {
-          document.documentElement.classList.add("dark");
+          document.documentElement.classList.add("dark", "bp6-dark");
           document.documentElement.style.colorScheme = "dark";
         } else {
+          document.documentElement.classList.remove("dark", "bp6-dark");
           document.documentElement.style.colorScheme = "light";
         }
-      } catch (e) {}
+      } catch {
+        // Ignore storage access errors during early theme bootstrap
+      }
     </script>
   </head>
   <body>

@@ -1,7 +1,10 @@
-import { Routes, Route, Navigate } from "react-router-dom";
+import { Routes, Route, Navigate, Link } from "react-router-dom";
+import { NonIdealState } from "@blueprintjs/core";
 import { useAuth } from "./context/useAuth";
 import { Navbar } from "./components/Navbar";
 import { RequireRole } from "./components/RequireRole";
+import { Card } from "./components/ui/Card";
+import { Button } from "./components/ui/Button";
 
 import Login from "./pages/Login";
 import Register from "./pages/Register";
@@ -9,6 +12,7 @@ import Dashboard from "./pages/Dashboard";
 import Trainees from "./pages/Trainees";
 import TraineeProfile from "./pages/TraineeProfile";
 import TraineeMe from "./pages/TraineeMe";
+import MyEmployment from "./pages/MyEmployment";
 import CoursesAndProviders from "./pages/CoursesAndProviders";
 import ProviderProfile from "./pages/ProviderProfile";
 import Skills from "./pages/Skills";
@@ -22,7 +26,7 @@ function RootRedirect() {
 
 export default function App() {
   return (
-    <div className="min-h-screen flex flex-col bg-gray-50 text-gray-900 dark:bg-gray-950 dark:text-gray-50">
+    <div className="min-h-screen flex flex-col bg-[#f6f7f9] text-[#1c2127] dark:bg-[#1c2127] dark:text-[#f6f7f9]">
       <Navbar />
 
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
@@ -76,6 +80,14 @@ export default function App() {
               </RequireRole>
             }
           />
+          <Route
+            path="/my-employment"
+            element={
+              <RequireRole roles={["TRAINEE"]}>
+                <MyEmployment />
+              </RequireRole>
+            }
+          />
 
           {/* Open to All Roles */}
           <Route path="/courses" element={<CoursesAndProviders />} />
@@ -85,12 +97,21 @@ export default function App() {
           <Route
             path="*"
             element={
-              <div className="max-w-md mx-auto my-14 p-6 bg-white border border-gray-200 rounded-lg text-center dark:bg-gray-900 dark:border-gray-800">
-                <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">404</p>
-                <h1 className="text-lg font-semibold text-gray-900 dark:text-gray-50 mt-1">Page Not Found</h1>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1.5">
-                  The page you requested does not exist or has been moved.
-                </p>
+              <div className="max-w-md mx-auto my-14">
+                <Card>
+                  <NonIdealState
+                    icon="search"
+                    title="404 — Page Not Found"
+                    description="The page you requested does not exist or has been moved."
+                    action={
+                      <Link to="/">
+                        <Button variant="primary">
+                          Return Home
+                        </Button>
+                      </Link>
+                    }
+                  />
+                </Card>
               </div>
             }
           />

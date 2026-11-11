@@ -2,6 +2,7 @@ import { StrictMode } from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { OverlaysProvider } from "@blueprintjs/core";
 import { AuthProvider } from "./context/AuthContext";
 import { ThemeProvider } from "./context/ThemeContext";
 import { ToastProvider } from "./components/ui/Toast";
@@ -24,7 +25,7 @@ async function prepareApp() {
     if (demoMode) {
       const { worker } = await import("./mocks/browser");
       return worker.start({
-        onUnhandledRequest: "bypass",
+        onUnhandledFrame: "bypass",
       });
     }
   }
@@ -36,13 +37,15 @@ prepareApp().then(() => {
     <StrictMode>
       <QueryClientProvider client={queryClient}>
         <ThemeProvider>
-          <AuthProvider>
-            <ToastProvider>
-              <BrowserRouter>
-                <App />
-              </BrowserRouter>
-            </ToastProvider>
-          </AuthProvider>
+          <OverlaysProvider>
+            <AuthProvider>
+              <ToastProvider>
+                <BrowserRouter>
+                  <App />
+                </BrowserRouter>
+              </ToastProvider>
+            </AuthProvider>
+          </OverlaysProvider>
         </ThemeProvider>
       </QueryClientProvider>
     </StrictMode>

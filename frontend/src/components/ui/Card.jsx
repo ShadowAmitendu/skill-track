@@ -1,7 +1,86 @@
-export function Card({ children, className = "", ...props }) {
+import {
+  Card as BpCard,
+  CardList as BpCardList,
+  Elevation,
+  H5,
+  Section as BpSection,
+  SectionCard as BpSectionCard,
+} from "@blueprintjs/core";
+
+export { Elevation };
+
+/**
+ * @param {object} props
+ * @param {any} [props.children]
+ * @param {string} [props.className]
+ * @param {boolean} [props.interactive]
+ * @param {any} [props.elevation]
+ * @param {boolean} [props.compact]
+ * @param {boolean} [props.selected]
+ * @param {(e: any) => void} [props.onClick]
+ * @param {(e: any) => void} [props.onKeyDown]
+ * @param {string} [props.role]
+ * @param {number} [props.tabIndex]
+ */
+export function Card({
+  elevation = Elevation.ONE,
+  interactive = false,
+  selected = false,
+  compact = false,
+  className = "",
+  children,
+  ...props
+}) {
+  return (
+    <BpCard
+      elevation={elevation}
+      interactive={interactive}
+      selected={selected}
+      compact={compact}
+      className={className}
+      {...props}
+    >
+      {children}
+    </BpCard>
+  );
+}
+
+/**
+ * @param {object} props
+ * @param {any} [props.children]
+ * @param {any} [props.title]
+ * @param {any} [props.subtitle]
+ * @param {any} [props.icon]
+ * @param {any} [props.rightElement]
+ * @param {boolean} [props.compact]
+ * @param {boolean} [props.collapsible]
+ * @param {any} [props.collapseProps]
+ * @param {any} [props.elevation]
+ * @param {string} [props.className]
+ */
+export function Section({ elevation = Elevation.ONE, ...props }) {
+  return <BpSection elevation={elevation} {...props} />;
+}
+
+/**
+ * @param {object} props
+ * @param {any} [props.children]
+ * @param {boolean} [props.padded]
+ * @param {boolean} [props.compact]
+ * @param {string} [props.className]
+ */
+export function SectionCard({ padded = true, compact: _compact = false, ...props }) {
+  return <BpSectionCard padded={padded} {...props} />;
+}
+
+export function CardList({ bordered = true, ...props }) {
+  return <BpCardList bordered={bordered} {...props} />;
+}
+
+export function CardHeader({ className = "", children, ...props }) {
   return (
     <div
-      className={`bg-white border border-gray-200 rounded-lg dark:bg-gray-900 dark:border-gray-800 ${className}`}
+      className={`pb-3 mb-4 border-b border-black/10 dark:border-white/10 ${className}`.trim()}
       {...props}
     >
       {children}
@@ -9,45 +88,34 @@ export function Card({ children, className = "", ...props }) {
   );
 }
 
-export function CardHeader({ children, className = "", ...props }) {
+export function CardTitle({ className = "", children, ...props }) {
   return (
-    <div
-      className={`px-5 py-4 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between gap-4 ${className}`}
-      {...props}
-    >
+    <H5 className={`!mb-0 ${className}`.trim()} {...props}>
       {children}
-    </div>
+    </H5>
   );
 }
 
-export function CardTitle({ children, className = "", ...props }) {
+export function CardDescription({ className = "", children, ...props }) {
   return (
-    <h3 className={`text-sm font-semibold text-gray-900 dark:text-gray-50 ${className}`} {...props}>
-      {children}
-    </h3>
-  );
-}
-
-export function CardDescription({ children, className = "", ...props }) {
-  return (
-    <p className={`text-xs text-gray-500 dark:text-gray-400 mt-0.5 ${className}`} {...props}>
+    <p className={`bp6-text-muted text-xs mt-1 ${className}`.trim()} {...props}>
       {children}
     </p>
   );
 }
 
-export function CardContent({ children, className = "", ...props }) {
+export function CardContent({ className = "", children, ...props }) {
   return (
-    <div className={`p-5 ${className}`} {...props}>
+    <div className={className} {...props}>
       {children}
     </div>
   );
 }
 
-export function CardFooter({ children, className = "", ...props }) {
+export function CardFooter({ className = "", children, ...props }) {
   return (
     <div
-      className={`px-5 py-3.5 bg-gray-50 border-t border-gray-200 rounded-b-lg dark:bg-gray-950/60 dark:border-gray-800 ${className}`}
+      className={`pt-3 mt-4 border-t border-black/10 dark:border-white/10 flex items-center gap-2 ${className}`.trim()}
       {...props}
     >
       {children}

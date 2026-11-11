@@ -15,7 +15,13 @@ import { traineeApi, adminApi } from "../api/endpoints";
 import { useAuth } from "../context/useAuth";
 import { useToast } from "../components/ui/useToast";
 import {
-  Search,
+  EMPLOYMENT_STATUS_OPTIONS,
+  getEmploymentMeta,
+  isEmployedStatus,
+  normalizeEmploymentStatus,
+  toApiEmploymentStatus,
+} from "../utils/domain";
+import {
   Plus,
   Eye,
   Trash2,
@@ -32,7 +38,9 @@ import { Badge } from "../components/ui/Badge";
 import { Avatar } from "../components/ui/Avatar";
 import { Switch } from "../components/ui/Switch";
 import { Select } from "../components/ui/Select";
-import { Card } from "../components/ui/Card";
+import { ButtonGroup, H2, Intent } from "@blueprintjs/core";
+import { Card, Section, SectionCard } from "../components/ui/Card";
+import { Table } from "../components/ui/Table";
 import { Field, Input } from "../components/ui/Field";
 import { LoadingState, ErrorState, EmptyState } from "../components/ui/QueryState";
 import {
@@ -58,9 +66,10 @@ const addTraineeSchema = z.object({
   fullName: z.string().min(2, "Full name is required"),
   email: z.string().email("Valid email required"),
   phoneNumber: z.string().optional(),
-  employmentStatus: z.enum(["EMPLOYED", "UNEMPLOYED", "SEEKING"]),
+  employmentStatus: z.enum(["FULL_TIME", "PART_TIME", "INTERNSHIP", "SELF_EMPLOYED", "UNEMPLOYED"]),
   companyName: z.string().optional(),
   currentRole: z.string().optional(),
+  unemployedReason: z.string().optional(),
 });
 
 export default function Trainees() {
@@ -78,7 +87,7 @@ export default function Trainees() {
   const [sorting, setSorting] = useState([]);
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
-  const [addStatus, setAddStatus] = useState("SEEKING");
+  const [addStatus, setAddStatus] = useState("UNEMPLOYED");
 
   const updateParams = (updates, resetPage = true) => {
     const next = new URLSearchParams(searchParams);
@@ -108,7 +117,7 @@ export default function Trainees() {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (id) => adminApi.removeTrainee(id),
+    mutationFn: (id) => (role === "ADMIN" ? adminApi.removeTrainee(id) : traineeApi.delete(id)),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["trainees"] });
       queryClient.invalidateQueries({ queryKey: ["adminDashboard"] });
@@ -121,7 +130,8 @@ export default function Trainees() {
   });
 
   const emailStopMutation = useMutation({
-    mutationFn: ({ id, stop }) => adminApi.stopEmails(id, stop),
+    mutationFn: /** @param {{ id: any, stop: boolean }} payload */ ({ id, stop }) =>
+      adminApi.stopEmails(id, stop),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["trainees"] });
       addToast({ title: "Email Setting Updated", description: "Quarterly email setting updated." });
@@ -143,9 +153,10 @@ export default function Trainees() {
       fullName: "",
       email: "",
       phoneNumber: "",
-      employmentStatus: "SEEKING",
+      employmentStatus: "UNEMPLOYED",
       companyName: "",
       currentRole: "",
+      unemployedReason: "",
     },
   });
 
@@ -154,14 +165,16 @@ export default function Trainees() {
       const fn = role === "ADMIN" ? adminApi.addTrainee : traineeApi.create;
       await fn({
         ...formData,
+        employmentStatus: toApiEmploymentStatus(formData.employmentStatus),
         consentGiven: true,
         allowEmails: true,
       });
       queryClient.invalidateQueries({ queryKey: ["trainees"] });
       queryClient.invalidateQueries({ queryKey: ["adminDashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["skillsSummary"] });
       addToast({ title: "Trainee Added", description: `${formData.fullName} registered.` });
       reset();
-      setAddStatus("SEEKING");
+      setAddStatus("UNEMPLOYED");
       setAddModalOpen(false);
     } catch (err) {
       addToast({ title: "Creation Failed", description: err.message, variant: "danger" });
@@ -170,6 +183,7 @@ export default function Trainees() {
 
   const filteredData = useMemo(() => {
     const q = searchFilter.trim().toLowerCase();
+    const cleanIdQuery = q.replace(/^#/, "");
     return trainees.filter((item) => {
       const matchSearch =
         !q ||
@@ -177,9 +191,10 @@ export default function Trainees() {
         item.email?.toLowerCase().includes(q) ||
         item.currentRole?.toLowerCase().includes(q) ||
         item.companyName?.toLowerCase().includes(q) ||
-        String(item.id) === q;
+        String(item.id) === cleanIdQuery;
 
-      const matchStatus = statusFilter === "ALL" || item.employmentStatus === statusFilter;
+      const matchStatus =
+        statusFilter === "ALL" || normalizeEmploymentStatus(item.employmentStatus) === statusFilter;
 
       const matchConsent =
         consentFilter === "ALL" ||
@@ -209,13 +224,7 @@ export default function Trainees() {
         accessorKey: "employmentStatus",
         header: "Status",
         cell: ({ getValue }) => {
-          const status = getValue();
-          const configs = {
-            EMPLOYED: { label: "Employed", variant: "emerald" },
-            UNEMPLOYED: { label: "Unemployed", variant: "rose" },
-            SEEKING: { label: "Seeking", variant: "amber" },
-          };
-          const conf = configs[status] || { label: status || "Unknown", variant: "neutral" };
+          const conf = getEmploymentMeta(getValue());
           return <Badge variant={conf.variant}>{conf.label}</Badge>;
         },
       },
@@ -287,20 +296,20 @@ export default function Trainees() {
             <Button
               variant="outline"
               size="sm"
+              icon={<Eye size={13} />}
               onClick={() => navigate(`/trainees/${row.original.id}`)}
             >
-              <Eye size={13} /> Profile
+              View Profile
             </Button>
-            {role === "ADMIN" && (
+            {(role === "ADMIN" || role === "COURSE_PROVIDER") && (
               <Button
                 variant="ghost"
-                size="icon"
-                className="text-red-700 hover:bg-red-50 hover:text-red-800 dark:text-red-400 dark:hover:bg-red-950/60 dark:hover:text-red-300"
+                intent={Intent.DANGER}
+                size="sm"
+                icon={<Trash2 size={14} />}
                 onClick={() => setDeleteTarget(row.original)}
                 aria-label={`Remove ${row.original.fullName}`}
-              >
-                <Trash2 size={14} />
-              </Button>
+              />
             )}
           </div>
         ),
@@ -337,30 +346,33 @@ export default function Trainees() {
     <div className="space-y-5">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-50">Trainees Directory</h1>
-          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+          <H2 className="!mb-0">Trainees Directory</H2>
+          <p className="bp6-text-muted text-xs mt-1">
             Search, filter, sort, and inspect trainee outcomes across {trainees.length} records.
           </p>
         </div>
 
-        {role === "ADMIN" && (
-          <Button variant="primary" size="md" onClick={() => setAddModalOpen(true)}>
-            <Plus size={15} /> Add Trainee
+        {(role === "ADMIN" || role === "COURSE_PROVIDER") && (
+          <Button
+            variant="primary"
+            icon={<Plus size={14} />}
+            onClick={() => setAddModalOpen(true)}
+          >
+            Add Trainee
           </Button>
         )}
       </div>
 
       {/* Filters Toolbar */}
-      <Card>
-        <div className="p-3.5 flex flex-col md:flex-row items-stretch md:items-center gap-3">
-          <div className="relative flex-1">
+      <Card compact>
+        <div className="flex flex-col md:flex-row items-stretch md:items-center gap-3">
+          <div className="flex-1">
             <Input
+              leftIcon="search"
               value={searchFilter}
               onChange={(e) => updateParams({ search: e.target.value })}
               placeholder="Search by name, email, company, role, or ID..."
-              className="pl-9"
             />
-            <Search size={15} className="absolute left-3 top-2.5 text-gray-400 dark:text-gray-500" />
           </div>
 
           <div className="w-full md:w-44">
@@ -369,9 +381,10 @@ export default function Trainees() {
               onValueChange={(val) => updateParams({ status: val })}
               options={[
                 { value: "ALL", label: "All Statuses" },
-                { value: "EMPLOYED", label: "Employed" },
-                { value: "SEEKING", label: "Seeking" },
-                { value: "UNEMPLOYED", label: "Unemployed" },
+                ...EMPLOYMENT_STATUS_OPTIONS.map((opt) => ({
+                  value: opt.value,
+                  label: opt.label,
+                })),
               ]}
             />
           </div>
@@ -391,10 +404,10 @@ export default function Trainees() {
           {hasFilters && (
             <Button
               variant="outline"
-              size="md"
+              icon={<X size={14} />}
               onClick={() => updateParams({ search: "", status: "ALL", consent: "ALL" })}
             >
-              <X size={14} /> Clear
+              Clear
             </Button>
           )}
         </div>
@@ -407,14 +420,13 @@ export default function Trainees() {
         <ErrorState title="Failed to load trainees" error={error} onRetry={refetch} />
       ) : filteredData.length === 0 ? (
         <EmptyState
-          icon={Users}
+          icon={<Users size={28} />}
           title="No matching trainees"
           description="Try clearing or adjusting your search query, status filter, or consent filter."
           action={
             hasFilters && (
               <Button
                 variant="outline"
-                size="sm"
                 onClick={() => updateParams({ search: "", status: "ALL", consent: "ALL" })}
               >
                 Reset Filters
@@ -423,37 +435,37 @@ export default function Trainees() {
           }
         />
       ) : (
-        <Card className="overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
+        <Section title={`Registered Trainees (${filteredData.length})`} icon={<Users size={15} />}>
+          <SectionCard padded={false}>
+            <Table striped interactive className="w-full">
               <thead>
                 {table.getHeaderGroups().map((headerGroup) => (
-                  <tr key={headerGroup.id} className="bg-gray-50 border-b border-gray-200 dark:bg-gray-950/70 dark:border-gray-800">
+                  <tr key={headerGroup.id}>
                     {headerGroup.headers.map((header) => {
                       const canSort = header.column.getCanSort();
                       const sorted = header.column.getIsSorted();
                       return (
                         <th
                           key={header.id}
-                          className={`px-4 py-3 text-xs font-medium text-gray-600 dark:text-gray-400 whitespace-nowrap ${
-                            header.id === "actions" ? "text-right" : ""
-                          }`}
+                          className={header.id === "actions" ? "!text-right" : ""}
                         >
                           {canSort ? (
-                            <button
-                              type="button"
+                            <Button
+                              variant="minimal"
+                              size="sm"
                               onClick={header.column.getToggleSortingHandler()}
-                              className="inline-flex items-center gap-1 hover:text-gray-900 dark:hover:text-gray-100 cursor-pointer"
+                              endIcon={
+                                sorted === "asc" ? (
+                                  <ArrowUp size={12} />
+                                ) : sorted === "desc" ? (
+                                  <ArrowDown size={12} />
+                                ) : (
+                                  <ArrowUpDown size={12} className="opacity-60" />
+                                )
+                              }
                             >
                               {flexRender(header.column.columnDef.header, header.getContext())}
-                              {sorted === "asc" ? (
-                                <ArrowUp size={12} />
-                              ) : sorted === "desc" ? (
-                                <ArrowDown size={12} />
-                              ) : (
-                                <ArrowUpDown size={12} className="text-gray-400 dark:text-gray-500" />
-                              )}
-                            </button>
+                            </Button>
                           ) : (
                             flexRender(header.column.columnDef.header, header.getContext())
                           )}
@@ -463,44 +475,46 @@ export default function Trainees() {
                   </tr>
                 ))}
               </thead>
-              <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
+              <tbody>
                 {table.getRowModel().rows.map((row) => (
-                  <tr key={row.id} className="hover:bg-gray-50/80 dark:hover:bg-gray-800/50">
+                  <tr key={row.id}>
                     {row.getVisibleCells().map((cell) => (
-                      <td key={cell.id} className="px-4 py-3 text-sm align-middle">
+                      <td key={cell.id}>
                         {flexRender(cell.column.columnDef.cell, cell.getContext())}
                       </td>
                     ))}
                   </tr>
                 ))}
               </tbody>
-            </table>
-          </div>
+            </Table>
+          </SectionCard>
 
-          <div className="px-4 py-3 bg-gray-50 border-t border-gray-200 dark:bg-gray-950/70 dark:border-gray-800 flex items-center justify-between text-xs text-gray-600 dark:text-gray-400">
+          <SectionCard compact className="flex items-center justify-between text-xs bp6-text-muted">
             <span>
               Page {safePageIndex + 1} of {pageCount} ({filteredData.length} trainees)
             </span>
-            <div className="flex items-center gap-1.5">
+            <ButtonGroup>
               <Button
                 variant="outline"
                 size="sm"
+                icon={<ChevronLeft size={14} />}
                 disabled={!table.getCanPreviousPage()}
                 onClick={() => table.previousPage()}
               >
-                <ChevronLeft size={14} /> Prev
+                Prev
               </Button>
               <Button
                 variant="outline"
                 size="sm"
+                endIcon={<ChevronRight size={14} />}
                 disabled={!table.getCanNextPage()}
                 onClick={() => table.nextPage()}
               >
-                Next <ChevronRight size={14} />
+                Next
               </Button>
-            </div>
-          </div>
-        </Card>
+            </ButtonGroup>
+          </SectionCard>
+        </Section>
       )}
 
       {/* Add Trainee Dialog */}
@@ -544,15 +558,14 @@ export default function Trainees() {
                   setAddStatus(val);
                   setAddValue("employmentStatus", val);
                 }}
-                options={[
-                  { value: "SEEKING", label: "Seeking Employment" },
-                  { value: "EMPLOYED", label: "Employed" },
-                  { value: "UNEMPLOYED", label: "Unemployed" },
-                ]}
+                options={EMPLOYMENT_STATUS_OPTIONS.map((opt) => ({
+                  value: opt.value,
+                  label: opt.label,
+                }))}
               />
             </Field>
 
-            {addStatus === "EMPLOYED" && (
+            {isEmployedStatus(addStatus) ? (
               <div className="grid grid-cols-2 gap-3">
                 <Field label="Company Name" id="add-company">
                   <Input id="add-company" {...register("companyName")} placeholder="e.g. TCS" />
@@ -561,6 +574,14 @@ export default function Trainees() {
                   <Input id="add-role" {...register("currentRole")} placeholder="e.g. Developer" />
                 </Field>
               </div>
+            ) : (
+              <Field label="Unemployed Reason" id="add-reason">
+                <Input
+                  id="add-reason"
+                  {...register("unemployedReason")}
+                  placeholder="e.g. Actively looking, Career break..."
+                />
+              </Field>
             )}
 
             <DialogFooter>

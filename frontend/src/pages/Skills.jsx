@@ -3,9 +3,11 @@ import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { courseApi, traineeApi } from "../api/endpoints";
 import { useAuth } from "../context/useAuth";
-import { Award, Search, Users } from "lucide-react";
+import { Award, Users } from "lucide-react";
 import { Badge } from "../components/ui/Badge";
 import { Button } from "../components/ui/Button";
+import { Divider, EntityTitle, H2 } from "@blueprintjs/core";
+import { Card, CardList } from "../components/ui/Card";
 import { Input } from "../components/ui/Field";
 import {
   Dialog,
@@ -83,20 +85,19 @@ export default function Skills() {
     <div className="space-y-5">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-50">Skills Registry</h1>
-          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+          <H2 className="!mb-0">Skills Registry</H2>
+          <p className="bp6-text-muted text-xs mt-1">
             Skills grouped by category with enrolled and verified trainee counts.
           </p>
         </div>
 
-        <div className="relative w-full sm:w-72">
+        <div className="w-full sm:w-72">
           <Input
+            leftIcon="search"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search skill or category..."
-            className="pl-9"
           />
-          <Search size={15} className="absolute left-3 top-2.5 text-gray-400 dark:text-gray-500" />
         </div>
       </div>
 
@@ -106,7 +107,7 @@ export default function Skills() {
         <ErrorState title="Failed to load skills summary" error={error} onRetry={refetch} />
       ) : Object.keys(categorizedSkills).length === 0 ? (
         <EmptyState
-          icon={Award}
+          icon={<Award size={28} />}
           title="No matching skills"
           description="Try a different keyword or category name."
         />
@@ -115,8 +116,8 @@ export default function Skills() {
           {Object.entries(categorizedSkills).map(([category, items]) => (
             <div key={category} className="space-y-3">
               <div className="flex items-center gap-2">
-                <Badge variant="dark">{category}</Badge>
-                <span className="text-xs text-gray-500 dark:text-gray-400">
+                <Badge variant="primary" minimal={false}>{category}</Badge>
+                <span className="text-xs bp6-text-muted">
                   {items.length} {items.length === 1 ? "skill" : "skills"}
                 </span>
               </div>
@@ -125,46 +126,46 @@ export default function Skills() {
                 {items.map((skill) => {
                   const traineeCount = skill.enrolledTraineesCount ?? skill.traineeNames?.length ?? 0;
 
-                  const content = (
-                    <>
-                      <div className="flex items-start justify-between gap-2">
-                        <div>
-                          <p className="font-medium text-sm text-gray-900 dark:text-gray-50">{skill.skillName}</p>
-                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{category}</p>
-                        </div>
-                        <div className="w-8 h-8 rounded-md bg-gray-100 border border-gray-200 text-gray-700 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-200 flex items-center justify-center shrink-0">
-                          <Award size={15} />
-                        </div>
-                      </div>
-
-                      <div className="mt-3 pt-2.5 border-t border-gray-200 dark:border-gray-800 flex items-center justify-between text-xs">
-                        <span className="text-gray-600 dark:text-gray-400 inline-flex items-center gap-1.5">
-                          <Users size={13} /> {traineeCount}{" "}
-                          {traineeCount === 1 ? "trainee" : "trainees"}
-                        </span>
-                        {canDrillDown && (
-                          <span className="font-medium text-gray-900 dark:text-gray-100">View list &rarr;</span>
-                        )}
-                      </div>
-                    </>
-                  );
-
-                  return canDrillDown ? (
-                    <button
+                  return (
+                    <Card
                       key={skill.skillId || skill.skillName}
-                      type="button"
-                      onClick={() => setSelectedSkill(skill)}
-                      className="text-left p-4 bg-white border border-gray-200 rounded-lg hover:border-gray-400 cursor-pointer outline-none focus-visible:outline-2 focus-visible:outline-gray-900 dark:bg-gray-900 dark:border-gray-800 dark:hover:border-gray-600 dark:focus-visible:outline-gray-100"
+                      interactive={canDrillDown}
+                      onClick={canDrillDown ? () => setSelectedSkill(skill) : undefined}
+                      role={canDrillDown ? "button" : undefined}
+                      tabIndex={canDrillDown ? 0 : undefined}
+                      onKeyDown={
+                        canDrillDown
+                          ? (e) => {
+                              if (e.key === "Enter" || e.key === " ") {
+                                e.preventDefault();
+                                setSelectedSkill(skill);
+                              }
+                            }
+                          : undefined
+                      }
                     >
-                      {content}
-                    </button>
-                  ) : (
-                    <div
-                      key={skill.skillId || skill.skillName}
-                      className="p-4 bg-white border border-gray-200 rounded-lg dark:bg-gray-900 dark:border-gray-800"
-                    >
-                      {content}
-                    </div>
+                      <EntityTitle
+                        icon={<Award size={16} className="bp6-text-muted" />}
+                        title={skill.skillName}
+                        subtitle={category}
+                      />
+
+                      {canDrillDown && (
+                        <>
+                          <Divider className="!my-3" />
+
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="bp6-text-muted inline-flex items-center gap-1.5">
+                              <Users size={13} /> {traineeCount}{" "}
+                              {traineeCount === 1 ? "trainee" : "trainees"}
+                            </span>
+                            <span className="font-medium text-[#2d72d2] dark:text-[#8abbff]">
+                              View trainees &rarr;
+                            </span>
+                          </div>
+                        </>
+                      )}
+                    </Card>
                   );
                 })}
               </div>
@@ -175,40 +176,40 @@ export default function Skills() {
 
       {/* Skill -> Trainees Drill-down Dialog */}
       <Dialog open={Boolean(selectedSkill)} onOpenChange={(open) => !open && setSelectedSkill(null)}>
-        <DialogContent maxWidth="max-w-md">
+        <DialogContent maxWidth="max-w-md" icon={<Award size={16} />}>
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Award size={16} /> {selectedSkill?.skillName}
-            </DialogTitle>
+            <DialogTitle>{selectedSkill?.skillName}</DialogTitle>
             <DialogDescription>
               Trainees with verified or active skill association ({selectedSkill?.category}).
             </DialogDescription>
           </DialogHeader>
 
-          <div className="my-2 max-h-72 overflow-y-auto divide-y divide-gray-200 dark:divide-gray-800">
+          <div className="max-h-72 overflow-y-auto">
             {matchedTraineesForSkill.length > 0 ? (
-              matchedTraineesForSkill.map((t) => (
-                <div key={t.id ?? t.key} className="py-2.5 flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <Avatar fallback={t.fullName} size="sm" />
-                    <div className="min-w-0">
-                      <p className="text-xs font-medium text-gray-900 dark:text-gray-50 truncate">{t.fullName}</p>
-                      <p className="text-[11px] text-gray-500 dark:text-gray-400 truncate">
-                        {t.employmentStatus || "Verified skill holder"}
-                      </p>
+              <CardList bordered>
+                {matchedTraineesForSkill.map((t) => (
+                  <Card key={t.id ?? t.key} compact className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <Avatar fallback={t.fullName} size="sm" />
+                      <div className="min-w-0">
+                        <div className="text-xs font-medium truncate">{t.fullName}</div>
+                        <div className="text-[11px] bp6-text-muted truncate">
+                          {t.employmentStatus || "Verified skill holder"}
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                  {t.id && (
-                    <Link to={`/trainees/${t.id}`}>
-                      <Button variant="outline" size="sm">
-                        Profile
-                      </Button>
-                    </Link>
-                  )}
-                </div>
-              ))
+                    {t.id && (
+                      <Link to={`/trainees/${t.id}`}>
+                        <Button variant="outline" size="sm">
+                          View Profile
+                        </Button>
+                      </Link>
+                    )}
+                  </Card>
+                ))}
+              </CardList>
             ) : (
-              <p className="text-xs text-gray-500 dark:text-gray-400 py-6 text-center">
+              <p className="text-xs bp6-text-muted py-6 text-center">
                 No individual trainee records linked for this skill in current DTO data. Count
                 reported: {selectedSkill?.enrolledTraineesCount ?? 0}.
               </p>
@@ -216,7 +217,7 @@ export default function Skills() {
           </div>
 
           <DialogFooter>
-            <DialogClose render={<Button variant="outline" size="sm">Close</Button>} />
+            <DialogClose render={<Button variant="outline">Close</Button>} />
           </DialogFooter>
         </DialogContent>
       </Dialog>

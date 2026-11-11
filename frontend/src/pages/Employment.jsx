@@ -10,7 +10,6 @@ import {
 } from "@tanstack/react-table";
 import { traineeApi } from "../api/endpoints";
 import {
-  Search,
   AlertCircle,
   Eye,
   BriefcaseBusiness,
@@ -21,13 +20,23 @@ import {
   ArrowDown,
   X,
 } from "lucide-react";
-import { Card, CardHeader, CardTitle, CardContent } from "../components/ui/Card";
+import { ButtonGroup, H2 } from "@blueprintjs/core";
+import { Card, Section, SectionCard, CardList } from "../components/ui/Card";
+import { Table } from "../components/ui/Table";
 import { Badge } from "../components/ui/Badge";
 import { Button } from "../components/ui/Button";
 import { Input } from "../components/ui/Field";
 import { Select } from "../components/ui/Select";
 import { Avatar } from "../components/ui/Avatar";
 import { LoadingState, ErrorState, EmptyState } from "../components/ui/QueryState";
+import {
+  EMPLOYMENT_STATUS_OPTIONS,
+  categorizeUnemployedReason,
+  getEmploymentMeta,
+  getUnemployedReasonText,
+  isEmployedStatus,
+  normalizeEmploymentStatus,
+} from "../utils/domain";
 
 export default function Employment() {
   const navigate = useNavigate();
@@ -67,33 +76,64 @@ export default function Employment() {
   });
 
   const counts = useMemo(() => {
-    const employed = trainees.filter((t) => t.employmentStatus === "EMPLOYED").length;
-    const unemployed = trainees.filter((t) => t.employmentStatus === "UNEMPLOYED").length;
-    const seeking = trainees.filter((t) => t.employmentStatus === "SEEKING").length;
-    return { employed, unemployed, seeking, total: trainees.length };
+    const bucketCounts = {
+      FULL_TIME: 0,
+      PART_TIME: 0,
+      INTERNSHIP: 0,
+      SELF_EMPLOYED: 0,
+      UNEMPLOYED: 0,
+    };
+    trainees.forEach((t) => {
+      const normalized = normalizeEmploymentStatus(t.employmentStatus);
+      bucketCounts[normalized] = (bucketCounts[normalized] || 0) + 1;
+    });
+    return { ...bucketCounts, total: trainees.length };
   }, [trainees]);
 
-  const unemployedReasons = useMemo(() => {
+  const unemployedTrainees = useMemo(() => {
+    return trainees
+      .filter((t) => !isEmployedStatus(t.employmentStatus))
+      .map((t) => {
+        const reasonText = getUnemployedReasonText(t) || "No reason specified";
+        return {
+          ...t,
+          reasonText,
+          reasonCategory: categorizeUnemployedReason(reasonText),
+        };
+      });
+  }, [trainees]);
+
+  const unemployedCategoryCounts = useMemo(() => {
     const map = {};
-    trainees.forEach((t) => {
-      if (t.employmentStatus === "UNEMPLOYED" && t.unemployedReason) {
-        map[t.unemployedReason] = (map[t.unemployedReason] || 0) + 1;
-      }
+    unemployedTrainees.forEach((t) => {
+      map[t.reasonCategory] = (map[t.reasonCategory] || 0) + 1;
     });
     return map;
+  }, [unemployedTrainees]);
+
+  const employedSortedByRole = useMemo(() => {
+    return trainees
+      .filter((t) => isEmployedStatus(t.employmentStatus))
+      .sort((a, b) => {
+        const roleCmp = (a.currentRole || "zzzz").localeCompare(b.currentRole || "zzzz");
+        if (roleCmp !== 0) return roleCmp;
+        return (a.fullName || "").localeCompare(b.fullName || "");
+      });
   }, [trainees]);
 
   const filteredTrainees = useMemo(() => {
     const q = search.trim().toLowerCase();
+    const cleanIdQuery = q.replace(/^#/, "");
     const result = trainees.filter((t) => {
       const matchSearch =
         !q ||
         t.fullName?.toLowerCase().includes(q) ||
-        String(t.id) === q ||
+        String(t.id) === cleanIdQuery ||
         t.currentRole?.toLowerCase().includes(q) ||
         t.companyName?.toLowerCase().includes(q);
 
-      const matchStatus = statusFilter === "ALL" || t.employmentStatus === statusFilter;
+      const matchStatus =
+        statusFilter === "ALL" || normalizeEmploymentStatus(t.employmentStatus) === statusFilter;
       return matchSearch && matchStatus;
     });
 
@@ -125,10 +165,8 @@ export default function Employment() {
         accessorKey: "employmentStatus",
         header: "Status",
         cell: ({ getValue }) => {
-          const val = getValue();
-          if (val === "EMPLOYED") return <Badge variant="emerald">Employed</Badge>;
-          if (val === "UNEMPLOYED") return <Badge variant="rose">Unemployed</Badge>;
-          return <Badge variant="amber">Seeking</Badge>;
+          const conf = getEmploymentMeta(getValue());
+          return <Badge variant={conf.variant}>{conf.label}</Badge>;
         },
       },
       {
@@ -176,9 +214,10 @@ export default function Employment() {
             <Button
               variant="outline"
               size="sm"
+              icon={<Eye size={13} />}
               onClick={() => navigate(`/trainees/${row.original.id}`)}
             >
-              <Eye size={13} /> Inspect
+              View Profile
             </Button>
           </div>
         ),
@@ -209,95 +248,187 @@ export default function Employment() {
     getPaginationRowModel: getPaginationRowModel(),
   });
 
-  const statusBoxes = [
-    { key: "ALL", label: "All Trainees", count: counts.total, note: "Entire directory" },
-    { key: "EMPLOYED", label: "Employed", count: counts.employed, note: "Active placements" },
-    { key: "SEEKING", label: "Seeking", count: counts.seeking, note: "Actively interviewing" },
-    { key: "UNEMPLOYED", label: "Unemployed", count: counts.unemployed, note: "Reason captured" },
-  ];
+  const statusBoxes = EMPLOYMENT_STATUS_OPTIONS.map((opt) => ({
+    key: opt.value,
+    label: opt.label,
+    count: counts[opt.value] || 0,
+    note: opt.note,
+  }));
 
   return (
     <div className="space-y-5">
-      <div>
-        <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-50">Employment Outcomes</h1>
-        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-          Filter placements by status, inspect compensation growth, and review non-placement reasons.
-        </p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+          <H2 className="!mb-0">Employment Outcomes</H2>
+          <p className="bp6-text-muted text-xs mt-1">
+            Click a status box to inspect trainees, search by trainee name or ID, or browse role and
+            unemployed reason breakdowns ({counts.total} trainees).
+          </p>
+        </div>
+
+        {statusFilter !== "ALL" && (
+          <Button
+            variant="outline"
+            size="sm"
+            icon={<X size={13} />}
+            onClick={() => updateParams({ status: "ALL" })}
+          >
+            Show All Statuses
+          </Button>
+        )}
       </div>
 
-      {/* Status Filter Boxes */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+      {/* 5 Clickable Status Boxes */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
         {statusBoxes.map((box) => {
           const active = statusFilter === box.key;
+          const toggleStatus = () => updateParams({ status: active ? "ALL" : box.key });
           return (
-            <button
+            <Card
               key={box.key}
-              type="button"
-              onClick={() => updateParams({ status: box.key })}
-              className={`text-left p-4 rounded-lg border cursor-pointer outline-none focus-visible:outline-2 focus-visible:outline-gray-900 dark:focus-visible:outline-gray-100 ${
-                active
-                  ? "bg-gray-900 text-white border-gray-900 dark:bg-gray-100 dark:text-gray-950 dark:border-gray-100"
-                  : "bg-white text-gray-900 border-gray-200 hover:bg-gray-50 dark:bg-gray-900 dark:text-gray-50 dark:border-gray-800 dark:hover:bg-gray-800/70"
-              }`}
+              compact
+              interactive
+              selected={active}
+              elevation={active ? 2 : 1}
+              role="button"
+              tabIndex={0}
+              onClick={toggleStatus}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  toggleStatus();
+                }
+              }}
             >
               <div className="flex items-center justify-between gap-2">
-                <p
-                  className={`text-xs font-medium ${
-                    active ? "text-gray-300 dark:text-gray-600" : "text-gray-500 dark:text-gray-400"
-                  }`}
-                >
-                  {box.label}
-                </p>
-                {active && <Badge variant="outline">Active Filter</Badge>}
+                <span className="text-xs font-medium bp6-text-muted">{box.label}</span>
+                {active && <Badge variant="primary">Active</Badge>}
               </div>
-              <p className="text-2xl font-semibold mt-1 tabular-nums">{box.count}</p>
-              <p
-                className={`text-xs mt-1 ${
-                  active ? "text-gray-300 dark:text-gray-600" : "text-gray-500 dark:text-gray-400"
-                }`}
-              >
-                {box.note}
-              </p>
-            </button>
+              <H2 className="!mb-0 !mt-1.5 tabular-nums">{box.count}</H2>
+              <p className="text-xs bp6-text-muted mt-1">{box.note}</p>
+            </Card>
           );
         })}
       </div>
 
-      {/* Unemployed Reasons Breakdown */}
-      {Object.keys(unemployedReasons).length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <AlertCircle size={15} /> Reported Unemployed Reasons
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {Object.entries(unemployedReasons).map(([reason, count]) => (
-              <div
-                key={reason}
-                className="flex items-center justify-between gap-3 p-3 bg-gray-50 border border-gray-200 rounded-md text-xs dark:bg-gray-950/70 dark:border-gray-800"
-              >
-                <span className="font-medium text-gray-900 dark:text-gray-100">{reason}</span>
-                <Badge variant="outline" className="shrink-0">
-                  {count} {count === 1 ? "trainee" : "trainees"}
-                </Badge>
-              </div>
+      {/* Unemployed Block & Employed Block (Sorted by Role) */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        <Section
+          title={`Unemployed Block (${unemployedTrainees.length})`}
+          icon={<AlertCircle size={15} />}
+          rightElement={
+            <Button
+              variant="minimal"
+              size="sm"
+              onClick={() => updateParams({ status: "UNEMPLOYED" })}
+            >
+              Filter Unemployed
+            </Button>
+          }
+        >
+          <SectionCard compact className="flex flex-wrap gap-1.5">
+            {Object.entries(unemployedCategoryCounts).map(([category, cnt]) => (
+              <Badge key={category} variant={category === "Actively Looking" ? "amber" : "rose"}>
+                {category}: {cnt}
+              </Badge>
             ))}
-          </CardContent>
-        </Card>
-      )}
+          </SectionCard>
+          {unemployedTrainees.length > 0 ? (
+            <SectionCard padded={false}>
+              <CardList bordered={false}>
+                {unemployedTrainees.map((t) => (
+                  <Card key={t.id} compact className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-xs font-semibold truncate">{t.fullName}</span>
+                        <span className="text-[11px] bp6-text-muted tabular-nums">#{t.id}</span>
+                        <Badge variant={t.reasonCategory === "Actively Looking" ? "amber" : "outline"}>
+                          {t.reasonCategory}
+                        </Badge>
+                      </div>
+                      <p className="text-xs bp6-text-muted mt-0.5 truncate">{t.reasonText}</p>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="shrink-0"
+                      onClick={() => navigate(`/trainees/${t.id}`)}
+                    >
+                      View Profile
+                    </Button>
+                  </Card>
+                ))}
+              </CardList>
+            </SectionCard>
+          ) : (
+            <SectionCard>
+              <p className="text-xs bp6-text-muted">No unemployed trainees reported.</p>
+            </SectionCard>
+          )}
+        </Section>
+
+        <Section
+          title={`Employed Block — Sorted by Role (${employedSortedByRole.length})`}
+          icon={<BriefcaseBusiness size={15} />}
+          rightElement={
+            <Button
+              variant="minimal"
+              size="sm"
+              onClick={() => updateParams({ sort: "role", status: "ALL" })}
+            >
+              Sort Table by Role
+            </Button>
+          }
+        >
+          {employedSortedByRole.length > 0 ? (
+            <SectionCard padded={false}>
+              <CardList bordered={false} className="max-h-72 overflow-y-auto">
+                {employedSortedByRole.map((t) => {
+                  const statusMeta = getEmploymentMeta(t.employmentStatus);
+                  return (
+                    <Card key={t.id} compact className="flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-xs font-semibold truncate">
+                            {t.currentRole || "Placed Role"}
+                          </span>
+                          <Badge variant={statusMeta.variant}>{statusMeta.label}</Badge>
+                        </div>
+                        <p className="text-xs bp6-text-muted mt-0.5 truncate">
+                          {t.fullName} (#{t.id}) {t.companyName ? `at ${t.companyName}` : ""}
+                        </p>
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="shrink-0"
+                        onClick={() => navigate(`/trainees/${t.id}`)}
+                      >
+                        View Profile
+                      </Button>
+                    </Card>
+                  );
+                })}
+              </CardList>
+            </SectionCard>
+          ) : (
+            <SectionCard>
+              <p className="text-xs bp6-text-muted">No placed trainees recorded yet.</p>
+            </SectionCard>
+          )}
+        </Section>
+      </div>
 
       {/* Search & Sort Toolbar */}
-      <Card>
-        <div className="p-3.5 flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-          <div className="relative flex-1">
+      <Card compact>
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+          <div className="flex-1">
             <Input
+              leftIcon="search"
               value={search}
               onChange={(e) => updateParams({ search: e.target.value })}
               placeholder="Search by trainee name, ID, role, or company..."
-              className="pl-9"
             />
-            <Search size={15} className="absolute left-3 top-2.5 text-gray-400 dark:text-gray-500" />
           </div>
 
           <div className="w-full sm:w-48">
@@ -315,10 +446,10 @@ export default function Employment() {
           {(search || statusFilter !== "ALL") && (
             <Button
               variant="outline"
-              size="md"
+              icon={<X size={14} />}
               onClick={() => updateParams({ search: "", status: "ALL" })}
             >
-              <X size={14} /> Clear
+              Clear
             </Button>
           )}
         </div>
@@ -331,42 +462,45 @@ export default function Employment() {
         <ErrorState title="Failed to load employment records" error={error} onRetry={refetch} />
       ) : filteredTrainees.length === 0 ? (
         <EmptyState
-          icon={BriefcaseBusiness}
+          icon={<BriefcaseBusiness size={28} />}
           title="No matching employment records"
           description="Try clearing filters or selecting All Trainees."
         />
       ) : (
-        <Card className="overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
+        <Section
+          title={`Employment Records (${filteredTrainees.length})`}
+          icon={<BriefcaseBusiness size={15} />}
+        >
+          <SectionCard padded={false}>
+            <Table striped interactive className="w-full">
               <thead>
                 {table.getHeaderGroups().map((headerGroup) => (
-                  <tr key={headerGroup.id} className="bg-gray-50 border-b border-gray-200 dark:bg-gray-950/70 dark:border-gray-800">
+                  <tr key={headerGroup.id}>
                     {headerGroup.headers.map((header) => {
                       const canSort = header.column.getCanSort();
                       const sorted = header.column.getIsSorted();
                       return (
                         <th
                           key={header.id}
-                          className={`px-4 py-3 text-xs font-medium text-gray-600 dark:text-gray-400 whitespace-nowrap ${
-                            header.id === "actions" ? "text-right" : ""
-                          }`}
+                          className={header.id === "actions" ? "!text-right" : ""}
                         >
                           {canSort ? (
-                            <button
-                              type="button"
+                            <Button
+                              variant="minimal"
+                              size="sm"
                               onClick={header.column.getToggleSortingHandler()}
-                              className="inline-flex items-center gap-1 hover:text-gray-900 dark:hover:text-gray-100 cursor-pointer"
+                              endIcon={
+                                sorted === "asc" ? (
+                                  <ArrowUp size={12} />
+                                ) : sorted === "desc" ? (
+                                  <ArrowDown size={12} />
+                                ) : (
+                                  <ArrowUpDown size={12} className="opacity-60" />
+                                )
+                              }
                             >
                               {flexRender(header.column.columnDef.header, header.getContext())}
-                              {sorted === "asc" ? (
-                                <ArrowUp size={12} />
-                              ) : sorted === "desc" ? (
-                                <ArrowDown size={12} />
-                              ) : (
-                                <ArrowUpDown size={12} className="text-gray-400 dark:text-gray-500" />
-                              )}
-                            </button>
+                            </Button>
                           ) : (
                             flexRender(header.column.columnDef.header, header.getContext())
                           )}
@@ -376,44 +510,46 @@ export default function Employment() {
                   </tr>
                 ))}
               </thead>
-              <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
+              <tbody>
                 {table.getRowModel().rows.map((row) => (
-                  <tr key={row.id} className="hover:bg-gray-50/80 dark:hover:bg-gray-800/50">
+                  <tr key={row.id}>
                     {row.getVisibleCells().map((cell) => (
-                      <td key={cell.id} className="px-4 py-3 text-sm align-middle">
+                      <td key={cell.id}>
                         {flexRender(cell.column.columnDef.cell, cell.getContext())}
                       </td>
                     ))}
                   </tr>
                 ))}
               </tbody>
-            </table>
-          </div>
+            </Table>
+          </SectionCard>
 
-          <div className="px-4 py-3 bg-gray-50 border-t border-gray-200 dark:bg-gray-950/70 dark:border-gray-800 flex items-center justify-between text-xs text-gray-600 dark:text-gray-400">
+          <SectionCard compact className="flex items-center justify-between text-xs bp6-text-muted">
             <span>
               Page {safePageIndex + 1} of {pageCount} ({filteredTrainees.length} records)
             </span>
-            <div className="flex items-center gap-1.5">
+            <ButtonGroup>
               <Button
                 variant="outline"
                 size="sm"
+                icon={<ChevronLeft size={14} />}
                 disabled={!table.getCanPreviousPage()}
                 onClick={() => table.previousPage()}
               >
-                <ChevronLeft size={14} /> Prev
+                Prev
               </Button>
               <Button
                 variant="outline"
                 size="sm"
+                endIcon={<ChevronRight size={14} />}
                 disabled={!table.getCanNextPage()}
                 onClick={() => table.nextPage()}
               >
-                Next <ChevronRight size={14} />
+                Next
               </Button>
-            </div>
-          </div>
-        </Card>
+            </ButtonGroup>
+          </SectionCard>
+        </Section>
       )}
     </div>
   );

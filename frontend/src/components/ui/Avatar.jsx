@@ -1,5 +1,4 @@
-import { Avatar as BaseAvatar } from "@base-ui/react/avatar";
-
+/** @param {{ src?: string, alt?: string, fallback?: string, size?: "sm" | "md" | "lg" | "xl" | string, className?: string, [key: string]: any }} props */
 export function Avatar({
   src,
   alt = "",
@@ -23,22 +22,17 @@ export function Avatar({
   };
 
   return (
-    <BaseAvatar.Root
-      className={`inline-flex items-center justify-center shrink-0 rounded-full overflow-hidden bg-gray-100 border border-gray-200 dark:bg-gray-800 dark:border-gray-700 align-middle select-none ${
+    <span
+      className={`inline-flex items-center justify-center shrink-0 rounded-full overflow-hidden bg-[#1c2127] text-[#f6f7f9] font-medium border border-[#5f6b7c]/30 dark:bg-[#383e47] dark:border-white/25 align-middle select-none uppercase ${
         sizes[size] || sizes.md
       } ${className}`}
       {...props}
     >
-      {src && (
-        <BaseAvatar.Image
-          src={src}
-          alt={alt}
-          className="h-full w-full object-cover"
-        />
+      {src ? (
+        <img src={src} alt={alt} className="h-full w-full object-cover" />
+      ) : (
+        <span>{fallback ? getInitials(fallback) : "?"}</span>
       )}
-      <BaseAvatar.Fallback className="flex h-full w-full items-center justify-center bg-gray-900 font-medium text-gray-50 uppercase dark:bg-gray-700 dark:text-gray-50">
-        {fallback ? getInitials(fallback) : "?"}
-      </BaseAvatar.Fallback>
-    </BaseAvatar.Root>
+    </span>
   );
 }

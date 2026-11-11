@@ -6,7 +6,7 @@ export const worker = setupWorker(...handlers);
 export async function enableMocking() {
   if (import.meta.env.DEV) {
     return worker.start({
-      onUnhandledRequest: "bypass",
+      onUnhandledFrame: "bypass",
     });
   }
 }

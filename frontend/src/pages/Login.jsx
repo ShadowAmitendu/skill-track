@@ -1,164 +1,171 @@
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "../context/useAuth";
-import { Shield, Layers, UserCheck, ArrowRight, Mail, AlertCircle } from "lucide-react";
+import { ArrowRight, Eye, EyeOff, RefreshCw } from "lucide-react";
 import { Button } from "../components/ui/Button";
-import { Card, CardContent } from "../components/ui/Card";
+import { Card } from "../components/ui/Card";
+import { Callout } from "../components/ui/Callout";
 import { Field, Input } from "../components/ui/Field";
-import { Tabs, TabsList, TabsTab } from "../components/ui/Tabs";
+import { CaptchaChallenge } from "../components/CaptchaChallenge";
+import { generateCaptchaCode } from "../components/captcha-utils";
+import { H2 } from "@blueprintjs/core";
 
 export default function Login() {
-  const { login, switchPersona } = useAuth();
+  const { login } = useAuth();
   const navigate = useNavigate();
 
-  const defaultAdminEmail = import.meta.env.VITE_ADMIN_EMAIL || "admin@skilltrack.com";
-  const [activeRole, setActiveRole] = useState("ADMIN");
-  const [email, setEmail] = useState(defaultAdminEmail);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [captchaCode, setCaptchaCode] = useState(() => generateCaptchaCode());
+  const [captchaInput, setCaptchaInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  const handleRoleTabChange = (newRole) => {
-    setActiveRole(newRole);
-    setError(null);
-    if (newRole === "ADMIN") setEmail(defaultAdminEmail);
-    else if (newRole === "COURSE_PROVIDER") setEmail("partners@apexacademy.edu");
-    else setEmail("aarav.sharma@example.com");
+  const regenerateCaptcha = () => {
+    setCaptchaCode(generateCaptchaCode());
+    setCaptchaInput("");
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!email.trim()) {
-      setError("Please enter your email address.");
+      setError("Please enter your Mail ID.");
+      return;
+    }
+    if (!password.trim()) {
+      setError("Please enter your password.");
+      return;
+    }
+    if (!captchaInput.trim()) {
+      setError("Please enter the captcha code.");
+      return;
+    }
+    if (captchaInput.trim().toUpperCase() !== captchaCode) {
+      setError("Invalid captcha code. Please try again.");
+      regenerateCaptcha();
       return;
     }
 
     try {
       setLoading(true);
       setError(null);
-      await login({ email, role: activeRole });
+      await login({ email, password });
       navigate("/dashboard");
     } catch (err) {
-      setError(err.message || "Failed to sign in. Please verify your email.");
+      setError(err.message || "Failed to sign in. Please verify your credentials.");
+      regenerateCaptcha();
     } finally {
       setLoading(false);
     }
   };
 
-  const handleQuickPersona = (role) => {
-    switchPersona(role);
-    navigate("/dashboard");
-  };
-
   return (
-    <div className="max-w-md mx-auto my-10">
+    <div className="max-w-md mx-auto my-8">
       <Card>
-        <CardContent className="p-6 sm:p-8">
-          <div className="text-center mb-6">
-            <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-50">Sign in to SkillTrack</h1>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-              Unified portal for Admins, Course Providers, and Trainees
-            </p>
-          </div>
+        <div className="text-center mb-6">
+          <H2 className="!mb-1">Sign in to SkillTrack</H2>
+          <p className="bp6-text-muted text-xs">
+            One sign-in for Admins, Course Providers, and Trainees
+          </p>
+        </div>
 
-          <Tabs value={activeRole} onValueChange={handleRoleTabChange}>
-            <TabsList className="w-full grid grid-cols-3 mb-5">
-              <TabsTab value="ADMIN" className="text-xs">
-                <Shield size={13} className="mr-1.5" /> Admin
-              </TabsTab>
-              <TabsTab value="COURSE_PROVIDER" className="text-xs">
-                <Layers size={13} className="mr-1.5" /> Provider
-              </TabsTab>
-              <TabsTab value="TRAINEE" className="text-xs">
-                <UserCheck size={13} className="mr-1.5" /> Trainee
-              </TabsTab>
-            </TabsList>
+        <form onSubmit={handleSubmit} noValidate className="space-y-4">
+          {error && <Callout variant="danger">{error}</Callout>}
 
-            <form onSubmit={handleSubmit} className="space-y-4">
-              {error && (
-                <div className="p-3 bg-red-50 border border-red-200 rounded-md flex items-start gap-2 text-xs text-red-700 dark:bg-red-950/60 dark:border-red-900 dark:text-red-300">
-                  <AlertCircle size={15} className="shrink-0 mt-0.5" />
-                  <span>{error}</span>
-                </div>
-              )}
+          <Field
+            label="Mail ID or User ID"
+            required
+            id="login-email"
+            description="Enter your registered Mail ID or User ID (e.g. T-1, P-1, admin)."
+          >
+            <Input
+              id="login-email"
+              type="text"
+              leftIcon="envelope"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="name@example.com or T-1"
+              autoComplete="username"
+              required
+            />
+          </Field>
 
-              <Field label="Email Address" required id="login-email">
-                <div className="relative">
-                  <Input
-                    id="login-email"
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="Enter your registered email..."
-                    required
-                    className="pl-9"
-                  />
-                  <Mail size={15} className="absolute left-3 top-2.5 text-gray-400 dark:text-gray-500" />
-                </div>
-              </Field>
-
-              <p className="text-xs text-gray-500 dark:text-gray-400 leading-normal">
-                {activeRole === "ADMIN" &&
-                  `Verifies against configured VITE_ADMIN_EMAIL (${defaultAdminEmail}). UI-level access control only.`}
-                {activeRole === "COURSE_PROVIDER" &&
-                  "Looks up existing course providers by contact email."}
-                {activeRole === "TRAINEE" && "Looks up registered trainee profiles by email."}
-              </p>
-
-              <Button type="submit" variant="primary" loading={loading} className="w-full">
-                <span>
-                  Sign In as{" "}
-                  {activeRole === "ADMIN"
-                    ? "Admin"
-                    : activeRole === "COURSE_PROVIDER"
-                    ? "Provider"
-                    : "Trainee"}
-                </span>
-                <ArrowRight size={15} />
-              </Button>
-            </form>
-          </Tabs>
-
-          {import.meta.env.DEV && (
-            <div className="mt-6 pt-5 border-t border-gray-200 dark:border-gray-800">
-              <p className="text-[11px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider text-center mb-2.5">
-                Dev-Only Role Switcher
-              </p>
-              <div className="grid grid-cols-3 gap-2">
+          <Field label="Password" required id="login-password">
+            <Input
+              id="login-password"
+              type={showPassword ? "text" : "password"}
+              leftIcon="lock"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Enter your password"
+              autoComplete="current-password"
+              required
+              rightElement={
                 <Button
-                  variant="outline"
+                  variant="minimal"
                   size="sm"
-                  onClick={() => handleQuickPersona("ADMIN")}
-                  className="w-full"
-                >
-                  Admin
-                </Button>
+                  icon={showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
+                  onClick={() => setShowPassword((prev) => !prev)}
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  title={showPassword ? "Hide password" : "Show password"}
+                />
+              }
+            />
+          </Field>
+
+          <Field
+            label="Captcha"
+            required
+            id="login-captcha"
+            description="Enter the 6 characters displayed above (case-insensitive)."
+          >
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <CaptchaChallenge code={captchaCode} />
                 <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleQuickPersona("COURSE_PROVIDER")}
-                  className="w-full"
+                  variant="outlined"
+                  icon={<RefreshCw size={14} />}
+                  onClick={regenerateCaptcha}
+                  aria-label="Refresh captcha"
+                  title="Generate a new captcha"
+                  className="shrink-0"
                 >
-                  Provider
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleQuickPersona("TRAINEE")}
-                  className="w-full"
-                >
-                  Trainee
+                  Refresh
                 </Button>
               </div>
+              <Input
+                id="login-captcha"
+                type="text"
+                leftIcon="shield"
+                value={captchaInput}
+                onChange={(e) => setCaptchaInput(e.target.value)}
+                placeholder="Enter captcha code"
+                autoComplete="off"
+                spellCheck={false}
+                maxLength={6}
+                required
+              />
             </div>
-          )}
+          </Field>
 
-          <p className="text-center text-xs text-gray-500 dark:text-gray-400 mt-5">
-            New to SkillTrack?{" "}
-            <Link to="/register" className="font-medium text-gray-900 underline hover:text-gray-700 dark:text-gray-100 dark:hover:text-gray-300">
-              Register as Trainee or Provider
-            </Link>
-          </p>
-        </CardContent>
+          <Button
+            type="submit"
+            variant="primary"
+            fill
+            loading={loading}
+            endIcon={<ArrowRight size={14} />}
+          >
+            Sign In
+          </Button>
+        </form>
+
+        <p className="bp6-text-muted text-center text-xs mt-5">
+          New to SkillTrack?{" "}
+          <Link to="/register" className="font-medium underline">
+            Register as Trainee or Provider
+          </Link>
+        </p>
       </Card>
     </div>
   );

@@ -18,6 +18,10 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * @param {string} endpoint
+ * @param {{ method?: string, body?: any, headers?: Record<string, string>, signal?: AbortSignal, timeoutMs?: number }} [options]
+ */
 export async function apiClient(
   endpoint,
   { method = "GET", body, headers = {}, signal, timeoutMs = DEFAULT_TIMEOUT_MS } = {}

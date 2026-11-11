@@ -13,6 +13,9 @@ import {
   Send,
   AlertCircle,
   Award,
+  MailCheck,
+  CheckCircle2,
+  Clock,
 } from "lucide-react";
 import {
   BarChart,
@@ -23,11 +26,17 @@ import {
   ResponsiveContainer,
   Cell,
 } from "recharts";
-import { Card, CardHeader, CardTitle, CardContent } from "../ui/Card";
+import { Card, Section, SectionCard, CardList } from "../ui/Card";
+import { EntityTitle, H2, Icon, Intent } from "@blueprintjs/core";
 import { Badge } from "../ui/Badge";
 import { Button } from "../ui/Button";
 import { Progress } from "../ui/Progress";
 import { LoadingState, ErrorState } from "../ui/QueryState";
+import {
+  EMPLOYMENT_STATUS_OPTIONS,
+  hasTraineeRespondedFollowUp,
+  normalizeEmploymentStatus,
+} from "../../utils/domain";
 import {
   AlertDialog,
   AlertDialogContent,
@@ -68,13 +77,52 @@ export function AdminDashboardBoard() {
   });
 
   const consentMetrics = useMemo(() => {
-    if (trainees.length === 0) return { count: 0, percentage: 0 };
-    const consented = trainees.filter((t) => t.consentGiven).length;
+    const consented =
+      trainees.length > 0
+        ? trainees.filter((t) => t.consentGiven).length
+        : dashboard?.totalConsents ?? 0;
+    const total = trainees.length || dashboard?.totalTrainees || 0;
+    const pending = Math.max(0, total - consented);
+    const emailsAllowed = trainees.filter((t) => t.allowEmails && !t.adminStoppedEmail).length;
+    const haltedByAdmin = trainees.filter((t) => t.adminStoppedEmail).length;
     return {
       count: consented,
-      percentage: Math.round((consented / trainees.length) * 100),
+      pending,
+      emailsAllowed,
+      haltedByAdmin,
+      percentage: total === 0 ? 0 : Math.round((consented / total) * 100),
     };
-  }, [trainees]);
+  }, [trainees, dashboard]);
+
+  const followUpMetrics = useMemo(() => {
+    const responded =
+      trainees.length > 0
+        ? trainees.filter((t) => hasTraineeRespondedFollowUp(t)).length
+        : dashboard?.followUpRespondedCount ?? 0;
+    const total = trainees.length || dashboard?.totalTrainees || 0;
+    const notResponded =
+      trainees.length > 0
+        ? trainees.length - responded
+        : dashboard?.followUpNotRespondedCount ?? Math.max(0, total - responded);
+    const rate = total === 0 ? 0 : Math.round((responded / total) * 100);
+    return {
+      responded,
+      notResponded,
+      rate,
+      chartData: [
+        {
+          name: "Responded",
+          count: responded,
+          color: isDark ? "#32a467" : "#238551",
+        },
+        {
+          name: "Not Responded",
+          count: notResponded,
+          color: isDark ? "#ec9a3c" : "#d9822b",
+        },
+      ],
+    };
+  }, [trainees, dashboard, isDark]);
 
   const reminderMutation = useMutation({
     mutationFn: () => emailApi.triggerQuarterlyReminders(),
@@ -93,26 +141,36 @@ export function AdminDashboardBoard() {
     },
   });
 
+  const employmentCounts = useMemo(() => {
+    const counts = {
+      FULL_TIME: 0,
+      PART_TIME: 0,
+      INTERNSHIP: 0,
+      SELF_EMPLOYED: 0,
+      UNEMPLOYED: 0,
+    };
+    trainees.forEach((t) => {
+      const normalized = normalizeEmploymentStatus(t.employmentStatus);
+      counts[normalized] = (counts[normalized] || 0) + 1;
+    });
+    return counts;
+  }, [trainees]);
+
   const employmentChartData = useMemo(() => {
-    if (!dashboard) return [];
-    return [
-      {
-        name: "Employed",
-        count: dashboard.employedStudentsCount || 0,
-        color: isDark ? "#F9FAFB" : "#111827",
-      },
-      {
-        name: "Seeking",
-        count: dashboard.jobSeekingStudentsCount || 0,
-        color: isDark ? "#9CA3AF" : "#4B5563",
-      },
-      {
-        name: "Unemployed",
-        count: dashboard.unemployedStudentsCount || 0,
-        color: isDark ? "#6B7280" : "#9CA3AF",
-      },
-    ];
-  }, [dashboard, isDark]);
+    const colors = {
+      FULL_TIME: isDark ? "#32a467" : "#238551",
+      PART_TIME: isDark ? "#4c90f0" : "#2d72d2",
+      INTERNSHIP: isDark ? "#ec9a3c" : "#c87619",
+      SELF_EMPLOYED: isDark ? "#2ee6d6" : "#008075",
+      UNEMPLOYED: isDark ? "#e76a6e" : "#cd4246",
+    };
+    return EMPLOYMENT_STATUS_OPTIONS.map((opt) => ({
+      key: opt.value,
+      name: opt.label,
+      count: employmentCounts[opt.value] || 0,
+      color: colors[opt.value],
+    }));
+  }, [employmentCounts, isDark]);
 
   const topSkillsData = useMemo(() => {
     return [...skillsSummary]
@@ -142,138 +200,220 @@ export function AdminDashboardBoard() {
     <div className="space-y-5">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-50">
-            Administrator Dashboard
-          </h1>
-          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+          <H2 className="!mb-0">Administrator Dashboard</H2>
+          <p className="bp6-text-muted text-xs mt-1">
             Cohort totals, tracking consent, skills distribution, and quarterly reminder dispatch.
           </p>
         </div>
 
-        <Button variant="primary" size="md" onClick={() => setReminderModalOpen(true)}>
-          <Send size={14} /> Trigger Quarterly Reminders
+        <Button
+          variant="primary"
+          icon={<Send size={14} />}
+          onClick={() => setReminderModalOpen(true)}
+        >
+          Trigger Quarterly Reminders
         </Button>
       </div>
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Link to="/trainees" className="group block">
-          <Card className="group-hover:border-gray-400 dark:group-hover:border-gray-600 h-full">
-            <CardContent className="p-5 flex items-center justify-between gap-3">
-              <div>
-                <p className="text-xs text-gray-500 dark:text-gray-400 font-medium">
-                  Total Trainees
-                </p>
-                <p className="text-2xl font-semibold text-gray-900 dark:text-gray-50 mt-1 tabular-nums">
-                  {dashboard?.totalTrainees ?? trainees.length}
-                </p>
-                <span className="text-xs text-gray-600 dark:text-gray-400 group-hover:underline mt-1 inline-block">
-                  View directory &rarr;
-                </span>
-              </div>
-              <div className="w-10 h-10 rounded-md bg-gray-100 border border-gray-200 text-gray-800 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-200 flex items-center justify-center shrink-0">
-                <Users size={18} />
-              </div>
-            </CardContent>
+        <Link to="/trainees" className="block">
+          <Card interactive className="h-full">
+            <EntityTitle
+              icon={<Users size={18} className="bp6-text-muted" />}
+              title="Total Trainees"
+              subtitle="View directory →"
+            />
+            <H2 className="!mb-0 !mt-3 tabular-nums">
+              {dashboard?.totalTrainees ?? trainees.length}
+            </H2>
           </Card>
         </Link>
 
-        <Link to="/courses?tab=providers" className="group block">
-          <Card className="group-hover:border-gray-400 dark:group-hover:border-gray-600 h-full">
-            <CardContent className="p-5 flex items-center justify-between gap-3">
-              <div>
-                <p className="text-xs text-gray-500 dark:text-gray-400 font-medium">
-                  Course Providers
-                </p>
-                <p className="text-2xl font-semibold text-gray-900 dark:text-gray-50 mt-1 tabular-nums">
-                  {dashboard?.totalCourseProviders ?? 0}
-                </p>
-                <span className="text-xs text-gray-600 dark:text-gray-400 group-hover:underline mt-1 inline-block">
-                  View providers &rarr;
-                </span>
-              </div>
-              <div className="w-10 h-10 rounded-md bg-gray-100 border border-gray-200 text-gray-800 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-200 flex items-center justify-center shrink-0">
-                <Building2 size={18} />
-              </div>
-            </CardContent>
+        <Link to="/courses?tab=providers" className="block">
+          <Card interactive className="h-full">
+            <EntityTitle
+              icon={<Building2 size={18} className="bp6-text-muted" />}
+              title="Course Providers"
+              subtitle="View providers →"
+            />
+            <H2 className="!mb-0 !mt-3 tabular-nums">
+              {dashboard?.totalCourseProviders ?? 0}
+            </H2>
           </Card>
         </Link>
 
-        <Link to="/courses?tab=courses" className="group block">
-          <Card className="group-hover:border-gray-400 dark:group-hover:border-gray-600 h-full">
-            <CardContent className="p-5 flex items-center justify-between gap-3">
-              <div>
-                <p className="text-xs text-gray-500 dark:text-gray-400 font-medium">
-                  Accredited Courses
-                </p>
-                <p className="text-2xl font-semibold text-gray-900 dark:text-gray-50 mt-1 tabular-nums">
-                  {dashboard?.totalCourses ?? 0}
-                </p>
-                <span className="text-xs text-gray-600 dark:text-gray-400 group-hover:underline mt-1 inline-block">
-                  Browse courses &rarr;
-                </span>
-              </div>
-              <div className="w-10 h-10 rounded-md bg-gray-100 border border-gray-200 text-gray-800 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-200 flex items-center justify-center shrink-0">
-                <GraduationCap size={18} />
-              </div>
-            </CardContent>
+        <Link to="/courses?tab=courses" className="block">
+          <Card interactive className="h-full">
+            <EntityTitle
+              icon={<GraduationCap size={18} className="bp6-text-muted" />}
+              title="Accredited Courses"
+              subtitle="Browse courses →"
+            />
+            <H2 className="!mb-0 !mt-3 tabular-nums">
+              {dashboard?.totalCourses ?? 0}
+            </H2>
           </Card>
         </Link>
 
-        <Link to="/trainees?consent=true" className="group block">
-          <Card className="group-hover:border-gray-400 dark:group-hover:border-gray-600 h-full">
-            <CardContent className="p-5 space-y-2.5">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 font-medium">
-                    Consent Granted
-                  </p>
-                  <p className="text-2xl font-semibold text-gray-900 dark:text-gray-50 mt-1 tabular-nums">
-                    {consentMetrics.percentage}%
-                  </p>
-                </div>
-                <div className="w-10 h-10 rounded-md bg-gray-100 border border-gray-200 text-gray-800 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-200 flex items-center justify-center shrink-0">
-                  <ShieldCheck size={18} />
-                </div>
-              </div>
-              <Progress value={consentMetrics.percentage} />
-              <p className="text-xs text-gray-500 dark:text-gray-400">
-                {consentMetrics.count} of {trainees.length} trainees consented &rarr;
-              </p>
-            </CardContent>
+        <Link to="/trainees?consent=true" className="block">
+          <Card interactive className="h-full">
+            <EntityTitle
+              icon={<ShieldCheck size={18} className="bp6-text-muted" />}
+              title="Total Consents"
+              subtitle={`${consentMetrics.percentage}% of ${trainees.length} trainees consented →`}
+            />
+            <div className="mt-3 space-y-2">
+              <H2 className="!mb-0 tabular-nums">{consentMetrics.count}</H2>
+              <Progress value={consentMetrics.percentage} variant="success" />
+            </div>
           </Card>
         </Link>
       </div>
 
+      {/* Consent & Follow-Up Blocks */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        <Section
+          title="Consent Given & Outreach Status"
+          icon={<ShieldCheck size={16} />}
+          rightElement={
+            <Link to="/trainees?consent=true">
+              <Button variant="minimal" size="sm" endIcon={<Icon icon="arrow-right" size={12} />}>
+                View Consented
+              </Button>
+            </Link>
+          }
+        >
+          <SectionCard className="space-y-4">
+            <div className="flex items-center justify-between text-xs">
+              <span className="bp6-text-muted">Tracking Consent Share</span>
+              <span className="font-semibold tabular-nums">
+                {consentMetrics.count} / {trainees.length} ({consentMetrics.percentage}%)
+              </span>
+            </div>
+            <Progress value={consentMetrics.percentage} variant="success" />
+            <div className="grid grid-cols-3 gap-2 pt-1 text-center text-xs">
+              <Link to="/trainees?consent=true" className="block">
+                <span className="bp6-text-muted block">Consent Given</span>
+                <span className="font-semibold tabular-nums text-sm text-[#238551] dark:text-[#72ca9b]">
+                  {consentMetrics.count}
+                </span>
+              </Link>
+              <Link to="/trainees?consent=false" className="block">
+                <span className="bp6-text-muted block">Pending Consent</span>
+                <span className="font-semibold tabular-nums text-sm">
+                  {consentMetrics.pending}
+                </span>
+              </Link>
+              <div className="block">
+                <span className="bp6-text-muted block">Emails Enabled</span>
+                <span className="font-semibold tabular-nums text-sm">
+                  {consentMetrics.emailsAllowed}
+                </span>
+              </div>
+            </div>
+          </SectionCard>
+        </Section>
+
+        <Section
+          title="Follow-Up Status: Responded vs Not Responded"
+          icon={<MailCheck size={16} />}
+          rightElement={
+            <Link to="/trainees">
+              <Button variant="minimal" size="sm" endIcon={<Icon icon="arrow-right" size={12} />}>
+                Follow-Up List
+              </Button>
+            </Link>
+          }
+        >
+          <SectionCard>
+            <div className="h-[140px] w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  data={followUpMetrics.chartData}
+                  layout="vertical"
+                  margin={{ top: 4, right: 20, left: 20, bottom: 4 }}
+                >
+                  <XAxis
+                    type="number"
+                    allowDecimals={false}
+                    tick={{ fill: isDark ? "#abb3bf" : "#5f6b7c", fontSize: 11 }}
+                    stroke={isDark ? "#404854" : "#dce0e5"}
+                  />
+                  <YAxis
+                    type="category"
+                    dataKey="name"
+                    width={100}
+                    tick={{ fill: isDark ? "#f6f7f9" : "#1c2127", fontSize: 11 }}
+                    stroke={isDark ? "#404854" : "#dce0e5"}
+                  />
+                  <RechartsTooltip
+                    cursor={{ fill: isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)" }}
+                    contentStyle={{
+                      backgroundColor: isDark ? "#252a31" : "#ffffff",
+                      borderColor: isDark ? "#404854" : "#dce0e5",
+                      borderRadius: "4px",
+                      fontSize: "12px",
+                      color: isDark ? "#f6f7f9" : "#1c2127",
+                    }}
+                  />
+                  <Bar dataKey="count" radius={[0, 2, 2, 0]} isAnimationActive={false}>
+                    {followUpMetrics.chartData.map((entry, idx) => (
+                      <Cell key={idx} fill={entry.color} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </SectionCard>
+          <SectionCard compact className="flex flex-wrap items-center justify-between gap-3 text-xs">
+            <span className="inline-flex items-center gap-1.5 font-medium">
+              <CheckCircle2 size={13} className="text-[#238551] dark:text-[#72ca9b]" />
+              Responded: <strong className="tabular-nums">{followUpMetrics.responded}</strong>
+            </span>
+            <span className="inline-flex items-center gap-1.5 font-medium">
+              <Clock size={13} className="text-[#c87619] dark:text-[#ec9a3c]" />
+              Not Responded: <strong className="tabular-nums">{followUpMetrics.notResponded}</strong>
+            </span>
+            <Badge variant="outline">Response Rate: {followUpMetrics.rate}%</Badge>
+          </SectionCard>
+        </Section>
+      </div>
+
       {/* Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <BriefcaseBusiness size={16} /> Employment Breakdown
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
+        <Section
+          title="Employment Breakdown"
+          icon={<BriefcaseBusiness size={16} />}
+          rightElement={
+            <Link to="/employment">
+              <Button variant="minimal" size="sm" endIcon={<Icon icon="arrow-right" size={12} />}>
+                Employment
+              </Button>
+            </Link>
+          }
+        >
+          <SectionCard>
             <div className="h-64 w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={employmentChartData} margin={{ top: 10, right: 12, left: -16, bottom: 0 }}>
                   <XAxis
                     dataKey="name"
-                    tick={{ fontSize: 12, fill: isDark ? "#9CA3AF" : "#4B5563" }}
-                    stroke={isDark ? "#374151" : "#E5E7EB"}
+                    tick={{ fontSize: 12, fill: isDark ? "#abb3bf" : "#5f6b7c" }}
+                    stroke={isDark ? "#404854" : "#dce0e5"}
                   />
                   <YAxis
                     allowDecimals={false}
-                    tick={{ fontSize: 12, fill: isDark ? "#9CA3AF" : "#4B5563" }}
-                    stroke={isDark ? "#374151" : "#E5E7EB"}
+                    tick={{ fontSize: 12, fill: isDark ? "#abb3bf" : "#5f6b7c" }}
+                    stroke={isDark ? "#404854" : "#dce0e5"}
                   />
                   <RechartsTooltip
                     cursor={{ fill: isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)" }}
                     contentStyle={{
-                      backgroundColor: isDark ? "#111827" : "#FFFFFF",
-                      borderColor: isDark ? "#1F2937" : "#E5E7EB",
-                      color: isDark ? "#F9FAFB" : "#111827",
-                      borderRadius: "6px",
+                      backgroundColor: isDark ? "#252a31" : "#ffffff",
+                      borderColor: isDark ? "#404854" : "#dce0e5",
+                      color: isDark ? "#f6f7f9" : "#1c2127",
+                      borderRadius: "4px",
                       fontSize: "12px",
                     }}
                   />
@@ -285,45 +425,31 @@ export function AdminDashboardBoard() {
                 </BarChart>
               </ResponsiveContainer>
             </div>
-            <div className="grid grid-cols-3 gap-2 mt-4 pt-3 border-t border-gray-200 dark:border-gray-800 text-center text-xs">
-              <Link
-                to="/employment?status=EMPLOYED"
-                className="hover:bg-gray-50 dark:hover:bg-gray-800/70 rounded-md py-1"
-              >
-                <span className="text-gray-500 dark:text-gray-400 block">Employed</span>
-                <span className="font-semibold text-gray-900 dark:text-gray-50 tabular-nums">
-                  {dashboard?.employedStudentsCount || 0}
+          </SectionCard>
+          <SectionCard compact className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-center text-xs">
+            {EMPLOYMENT_STATUS_OPTIONS.map((opt) => (
+              <Link key={opt.value} to={`/employment?status=${opt.value}`} className="block">
+                <span className="bp6-text-muted block truncate">{opt.label}</span>
+                <span className="font-semibold tabular-nums text-sm">
+                  {employmentCounts[opt.value] || 0}
                 </span>
               </Link>
-              <Link
-                to="/employment?status=SEEKING"
-                className="hover:bg-gray-50 dark:hover:bg-gray-800/70 rounded-md py-1"
-              >
-                <span className="text-gray-500 dark:text-gray-400 block">Seeking</span>
-                <span className="font-semibold text-gray-900 dark:text-gray-50 tabular-nums">
-                  {dashboard?.jobSeekingStudentsCount || 0}
-                </span>
-              </Link>
-              <Link
-                to="/employment?status=UNEMPLOYED"
-                className="hover:bg-gray-50 dark:hover:bg-gray-800/70 rounded-md py-1"
-              >
-                <span className="text-gray-500 dark:text-gray-400 block">Unemployed</span>
-                <span className="font-semibold text-gray-900 dark:text-gray-50 tabular-nums">
-                  {dashboard?.unemployedStudentsCount || 0}
-                </span>
-              </Link>
-            </div>
-          </CardContent>
-        </Card>
+            ))}
+          </SectionCard>
+        </Section>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Award size={16} /> Top Skills Distribution
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
+        <Section
+          title="Top Skills Distribution"
+          icon={<Award size={16} />}
+          rightElement={
+            <Link to="/skills">
+              <Button variant="minimal" size="sm" endIcon={<Icon icon="arrow-right" size={12} />}>
+                View Skills
+              </Button>
+            </Link>
+          }
+        >
+          <SectionCard>
             <div className="h-64 w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart
@@ -334,75 +460,66 @@ export function AdminDashboardBoard() {
                   <XAxis
                     type="number"
                     allowDecimals={false}
-                    tick={{ fontSize: 12, fill: isDark ? "#9CA3AF" : "#4B5563" }}
-                    stroke={isDark ? "#374151" : "#E5E7EB"}
+                    tick={{ fontSize: 12, fill: isDark ? "#abb3bf" : "#5f6b7c" }}
+                    stroke={isDark ? "#404854" : "#dce0e5"}
                   />
                   <YAxis
                     type="category"
                     dataKey="name"
-                    tick={{ fontSize: 11, fill: isDark ? "#F3F4F6" : "#111827" }}
-                    stroke={isDark ? "#374151" : "#E5E7EB"}
+                    tick={{ fontSize: 11, fill: isDark ? "#f6f7f9" : "#1c2127" }}
+                    stroke={isDark ? "#404854" : "#dce0e5"}
                     width={90}
                   />
                   <RechartsTooltip
                     cursor={{ fill: isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)" }}
                     contentStyle={{
-                      backgroundColor: isDark ? "#111827" : "#FFFFFF",
-                      borderColor: isDark ? "#1F2937" : "#E5E7EB",
-                      color: isDark ? "#F9FAFB" : "#111827",
-                      borderRadius: "6px",
+                      backgroundColor: isDark ? "#252a31" : "#ffffff",
+                      borderColor: isDark ? "#404854" : "#dce0e5",
+                      color: isDark ? "#f6f7f9" : "#1c2127",
+                      borderRadius: "4px",
                       fontSize: "12px",
                     }}
                   />
                   <Bar
                     dataKey="trainees"
-                    fill={isDark ? "#E5E7EB" : "#111827"}
+                    fill={isDark ? "#4c90f0" : "#2d72d2"}
                     radius={[0, 4, 4, 0]}
                   />
                 </BarChart>
               </ResponsiveContainer>
             </div>
-            <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400 mt-4 pt-3 border-t border-gray-200 dark:border-gray-800">
-              <span>Computed from course enrollments and verified completions.</span>
-              <Link
-                to="/skills"
-                className="font-medium text-gray-900 underline hover:text-gray-700 dark:text-gray-100 dark:hover:text-gray-300"
-              >
-                View Skills &rarr;
-              </Link>
-            </div>
-          </CardContent>
-        </Card>
+          </SectionCard>
+          <SectionCard compact className="text-xs bp6-text-muted">
+            Computed from course enrollments and verified completions.
+          </SectionCard>
+        </Section>
       </div>
 
       {/* Unemployed Reasons */}
       {dashboard?.unemployedReasonsBreakdown &&
         Object.keys(dashboard.unemployedReasonsBreakdown).length > 0 && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <AlertCircle size={16} /> Reported Non-Placement Reasons
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {Object.entries(dashboard.unemployedReasonsBreakdown).map(([reason, count]) => (
-                <div
-                  key={reason}
-                  className="p-3 bg-gray-50 border border-gray-200 rounded-md flex items-center justify-between gap-3 text-xs dark:bg-gray-950/70 dark:border-gray-800"
-                >
-                  <span className="font-medium text-gray-900 dark:text-gray-100">{reason}</span>
-                  <Badge variant="outline" className="shrink-0">
-                    {count} {count === 1 ? "trainee" : "trainees"}
-                  </Badge>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
+          <Section
+            title="Reported Non-Placement Reasons"
+            icon={<AlertCircle size={16} />}
+          >
+            <SectionCard padded={false}>
+              <CardList bordered={false}>
+                {Object.entries(dashboard.unemployedReasonsBreakdown).map(([reason, count]) => (
+                  <Card key={reason} compact className="flex items-center justify-between gap-3">
+                    <span className="text-xs font-medium">{reason}</span>
+                    <Badge variant="outline" className="shrink-0">
+                      {count} {count === 1 ? "trainee" : "trainees"}
+                    </Badge>
+                  </Card>
+                ))}
+              </CardList>
+            </SectionCard>
+          </Section>
         )}
 
       {/* Trigger Quarterly Reminders AlertDialog */}
       <AlertDialog open={reminderModalOpen} onOpenChange={setReminderModalOpen}>
-        <AlertDialogContent variant="info">
+        <AlertDialogContent variant="info" icon="send-message">
           <AlertDialogHeader>
             <AlertDialogTitle>Send Quarterly Update Reminders?</AlertDialogTitle>
             <AlertDialogDescription>
@@ -411,10 +528,10 @@ export function AdminDashboardBoard() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogClose render={<Button variant="outline" size="sm">Cancel</Button>} />
+            <AlertDialogClose render={<Button variant="outline">Cancel</Button>} />
             <Button
               variant="primary"
-              size="sm"
+              intent={Intent.PRIMARY}
               loading={reminderMutation.isPending}
               onClick={() => reminderMutation.mutate()}
             >

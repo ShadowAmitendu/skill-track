@@ -1,20 +1,10 @@
-import { useCallback } from "react";
-import { Toast as BaseToast } from "@base-ui/react/toast";
+import { useContext } from "react";
+import { ToastContext } from "./toast-context";
 
 export function useToast() {
-  const { add, close } = BaseToast.useToastManager();
-
-  const addToast = useCallback(
-    ({ title, description, variant = "success", duration = 4000 }) => {
-      return add({
-        title,
-        description,
-        type: variant,
-        timeout: duration,
-      });
-    },
-    [add]
-  );
-
-  return { addToast, closeToast: close };
+  const context = useContext(ToastContext);
+  if (!context) {
+    throw new Error("useToast must be used within a ToastProvider");
+  }
+  return context;
 }

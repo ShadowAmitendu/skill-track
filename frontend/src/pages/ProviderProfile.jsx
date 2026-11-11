@@ -4,10 +4,12 @@ import { providerApi, courseApi, traineeApi } from "../api/endpoints";
 import { useAuth } from "../context/useAuth";
 import { useToast } from "../components/ui/useToast";
 import { ArrowLeft, Building2, Mail, ExternalLink, GraduationCap, CheckCircle2 } from "lucide-react";
-import { Card, CardHeader, CardTitle, CardContent, CardFooter } from "../components/ui/Card";
+import { Divider, EntityTitle, H2, H3, NonIdealState } from "@blueprintjs/core";
+import { Card, Section, SectionCard } from "../components/ui/Card";
 import { Badge } from "../components/ui/Badge";
 import { Button } from "../components/ui/Button";
 import { LoadingState, ErrorState, EmptyState } from "../components/ui/QueryState";
+import { deriveCourseCategory } from "../utils/domain";
 
 export default function ProviderProfile() {
   const { id } = useParams();
@@ -15,6 +17,10 @@ export default function ProviderProfile() {
   const queryClient = useQueryClient();
   const { role, user } = useAuth();
   const { addToast } = useToast();
+
+  const isProviderRole = role === "COURSE_PROVIDER";
+  const myProviderId = user?.id || 1;
+  const isRestricted = isProviderRole && Boolean(id) && Number(id) !== myProviderId;
 
   const {
     data: provider,
@@ -25,13 +31,13 @@ export default function ProviderProfile() {
   } = useQuery({
     queryKey: ["provider", id],
     queryFn: ({ signal }) => providerApi.getById(id, signal),
-    enabled: Boolean(id),
+    enabled: Boolean(id) && !isRestricted,
   });
 
   const { data: courses = [], isLoading: coursesLoading } = useQuery({
     queryKey: ["providerCourses", id],
     queryFn: ({ signal }) => courseApi.getByProvider(id, signal),
-    enabled: Boolean(id),
+    enabled: Boolean(id) && !isRestricted,
   });
 
   const { data: selfProfile } = useQuery({
@@ -50,6 +56,25 @@ export default function ProviderProfile() {
     onError: (err) => addToast({ title: "Enrollment Failed", description: err.message, variant: "danger" }),
   });
 
+  if (isRestricted) {
+    return (
+      <div className="max-w-md mx-auto my-12">
+        <Card>
+          <NonIdealState
+            icon="lock"
+            title="Access Restricted"
+            description="Course providers can view only their own organization profile and cannot inspect other providers."
+            action={
+              <Button variant="primary" onClick={() => navigate(`/providers/${myProviderId}`)}>
+                View My Profile
+              </Button>
+            }
+          />
+        </Card>
+      </div>
+    );
+  }
+
   if (providerLoading) {
     return <LoadingState label="Loading provider details..." rows={3} />;
   }
@@ -57,13 +82,13 @@ export default function ProviderProfile() {
   if (providerError || !provider) {
     return (
       <div className="space-y-4">
-        <button
-          type="button"
-          onClick={() => navigate("/courses?tab=providers")}
-          className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100 cursor-pointer"
+        <Button
+          variant="ghost"
+          icon={<ArrowLeft size={14} />}
+          onClick={() => navigate(isProviderRole ? "/courses" : "/courses?tab=providers")}
         >
-          <ArrowLeft size={14} /> Back to Providers
-        </button>
+          {isProviderRole ? "Back to My Courses" : "Back to Providers"}
+        </Button>
         <ErrorState
           title="Unable to load provider profile"
           error={providerErrObj || new Error("Course provider not found.")}
@@ -78,57 +103,57 @@ export default function ProviderProfile() {
 
   return (
     <div className="space-y-5">
-      <button
-        type="button"
-        onClick={() => navigate("/courses?tab=providers")}
-        className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100 cursor-pointer"
+      <Button
+        variant="ghost"
+        icon={<ArrowLeft size={14} />}
+        onClick={() => navigate(isProviderRole ? "/courses" : "/courses?tab=providers")}
       >
-        <ArrowLeft size={14} /> Back to Courses & Providers
-      </button>
+        {isProviderRole ? "Back to My Courses" : "Back to Courses & Providers"}
+      </Button>
 
       <Card>
-        <CardContent className="p-6">
-          <div className="flex items-start gap-4">
-            <div className="w-12 h-12 rounded-md bg-gray-100 border border-gray-200 flex items-center justify-center text-gray-800 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-200 shrink-0">
-              <Building2 size={22} />
-            </div>
-            <div className="min-w-0 flex-1">
-              <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-50">{provider.name}</h1>
-              <div className="flex items-center gap-4 text-xs text-gray-500 dark:text-gray-400 mt-1 flex-wrap">
-                <span className="inline-flex items-center gap-1.5">
-                  <Mail size={13} /> {provider.contactEmail}
-                </span>
-                {provider.website && (
-                  <a
-                    href={provider.website}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-1 text-gray-900 font-medium underline hover:text-gray-700 dark:text-gray-100 dark:hover:text-gray-300"
-                  >
-                    <ExternalLink size={12} /> {provider.website}
-                  </a>
-                )}
-              </div>
-              {provider.description && (
-                <p className="text-xs text-gray-600 dark:text-gray-400 leading-relaxed mt-3 pt-3 border-t border-gray-200 dark:border-gray-800">
-                  {provider.description}
-                </p>
+        <EntityTitle
+          icon={<Building2 size={20} className="bp6-text-muted" />}
+          heading={H2}
+          title={provider.name}
+          subtitle={
+            <div className="flex items-center gap-4 text-xs mt-1 flex-wrap">
+              <span className="inline-flex items-center gap-1.5">
+                <Mail size={13} /> {provider.contactEmail}
+              </span>
+              {provider.website && (
+                <a
+                  href={provider.website}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1 font-medium underline"
+                >
+                  <ExternalLink size={12} /> {provider.website}
+                </a>
               )}
             </div>
-          </div>
-        </CardContent>
+          }
+        />
+        {provider.description && (
+          <>
+            <Divider className="!my-4" />
+            <p className="bp6-text-muted text-xs leading-relaxed">
+              {provider.description}
+            </p>
+          </>
+        )}
       </Card>
 
       <div className="space-y-4">
-        <h2 className="text-base font-semibold text-gray-900 dark:text-gray-50 flex items-center gap-2">
+        <H3 className="!mb-0 flex items-center gap-2">
           <GraduationCap size={18} /> Offered Courses ({courses.length})
-        </h2>
+        </H3>
 
         {coursesLoading ? (
           <LoadingState label="Loading offered courses..." rows={2} />
         ) : courses.length === 0 ? (
           <EmptyState
-            icon={GraduationCap}
+            icon={<GraduationCap size={28} />}
             title="No courses published"
             description="This provider has not published any courses yet."
           />
@@ -137,35 +162,38 @@ export default function ProviderProfile() {
             {courses.map((course) => {
               const isEnrolled = enrolledSet.has(course.title);
               const isCompleted = completedSet.has(course.title);
+              const category = deriveCourseCategory(course.skillsTaught, course.category);
 
               return (
-                <Card key={course.id} className="flex flex-col justify-between">
-                  <CardHeader>
-                    <CardTitle>{course.title}</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-3 flex-1">
-                    <p className="text-xs text-gray-600 dark:text-gray-400 leading-relaxed">{course.description}</p>
+                <Section
+                  key={course.id}
+                  title={course.title}
+                  rightElement={<Badge variant="neutral">{category}</Badge>}
+                  className="flex flex-col"
+                >
+                  <SectionCard className="space-y-3 flex-1">
+                    <p className="text-xs bp6-text-muted leading-relaxed">{course.description}</p>
                     <div>
-                      <p className="text-[11px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">
+                      <p className="text-[11px] font-semibold bp6-text-muted uppercase tracking-wider mb-1.5">
                         Skills Taught
                       </p>
                       <div className="flex flex-wrap gap-1.5">
                         {(course.skillsTaught || []).map((skill) => (
-                          <Badge key={skill} variant="neutral">
+                          <Badge key={skill} variant="secondary">
                             {skill}
                           </Badge>
                         ))}
                       </div>
                     </div>
-                  </CardContent>
+                  </SectionCard>
                   {role === "TRAINEE" && (
-                    <CardFooter className="flex justify-end">
+                    <SectionCard compact className="flex justify-end">
                       {isCompleted ? (
-                        <Badge variant="emerald" className="gap-1">
-                          <CheckCircle2 size={12} /> Completed
+                        <Badge variant="success" icon={<CheckCircle2 size={12} />}>
+                          Completed
                         </Badge>
                       ) : isEnrolled ? (
-                        <Badge variant="neutral">Enrolled</Badge>
+                        <Badge variant="secondary">Enrolled</Badge>
                       ) : (
                         <Button
                           variant="primary"
@@ -176,9 +204,9 @@ export default function ProviderProfile() {
                           Enroll
                         </Button>
                       )}
-                    </CardFooter>
+                    </SectionCard>
                   )}
-                </Card>
+                </Section>
               );
             })}
           </div>

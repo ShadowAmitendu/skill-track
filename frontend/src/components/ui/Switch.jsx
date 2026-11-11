@@ -1,10 +1,19 @@
-import { useId } from "react";
-import { Switch as BaseSwitch } from "@base-ui/react/switch";
+import { Alignment, Switch as BpSwitch } from "@blueprintjs/core";
 
+/**
+ * @param {object} props
+ * @param {string} [props.id]
+ * @param {boolean} [props.checked]
+ * @param {(checked: boolean) => void} [props.onCheckedChange]
+ * @param {(e: any) => void} [props.onChange]
+ * @param {string} [props.label]
+ * @param {string} [props.description]
+ * @param {boolean} [props.disabled]
+ * @param {string} [props.className]
+ */
 export function Switch({
   checked,
   onCheckedChange,
-  defaultChecked,
   disabled = false,
   label,
   description,
@@ -12,45 +21,31 @@ export function Switch({
   id,
   ...props
 }) {
-  const generatedId = useId();
-  const switchId = id || generatedId;
-
-  const control = (
-    <BaseSwitch.Root
-      id={switchId}
-      checked={checked}
-      onCheckedChange={onCheckedChange}
-      defaultChecked={defaultChecked}
+  const switchEl = (
+    <BpSwitch
+      id={id}
+      checked={Boolean(checked)}
       disabled={disabled}
-      className={`relative flex h-6 w-10 shrink-0 items-center rounded-full p-0.5 cursor-pointer outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gray-900 disabled:cursor-not-allowed disabled:opacity-50 bg-gray-200 border border-gray-300 data-[checked]:bg-gray-900 data-[checked]:border-gray-900 dark:bg-gray-800 dark:border-gray-700 dark:data-[checked]:bg-gray-100 dark:data-[checked]:border-gray-100 dark:focus-visible:outline-gray-100 ${className}`}
+      alignIndicator={label ? Alignment.END : Alignment.START}
+      onChange={(e) => onCheckedChange?.(e.currentTarget.checked)}
+      className={!description ? className : "!mb-0"}
+      labelElement={
+        label ? (
+          <span>
+            <span className="font-medium">{label}</span>
+            {description && (
+              <span className="block bp6-text-muted text-xs mt-0.5">{description}</span>
+            )}
+          </span>
+        ) : undefined
+      }
       {...props}
-    >
-      <BaseSwitch.Thumb className="aspect-square h-full rounded-full bg-white shadow-sm data-[checked]:translate-x-4 dark:bg-gray-300 dark:data-[checked]:bg-gray-950" />
-    </BaseSwitch.Root>
+    />
   );
 
   if (!label && !description) {
-    return control;
+    return switchEl;
   }
 
-  return (
-    <div className="flex items-start justify-between gap-3">
-      <div className="flex flex-col">
-        {label && (
-          <label
-            htmlFor={switchId}
-            className="text-sm font-medium text-gray-900 dark:text-gray-100 cursor-pointer select-none"
-          >
-            {label}
-          </label>
-        )}
-        {description && (
-          <p className="text-xs text-gray-500 dark:text-gray-400 leading-normal mt-0.5">
-            {description}
-          </p>
-        )}
-      </div>
-      {control}
-    </div>
-  );
+  return <div className={className}>{switchEl}</div>;
 }

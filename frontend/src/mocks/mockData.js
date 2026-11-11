@@ -292,3 +292,22 @@ export const mockAdminDashboard = {
     return acc;
   }, {}),
 };
+
+export const mockMarketResearchDocs = {
+  "cloud-devops-2026.md": `# Cloud & DevOps Market Pulse (2026)
+
+- **Top In-Demand Capabilities:** Docker multi-stage containers, Kubernetes workload hardening, Terraform Infrastructure as Code, and GitHub Actions CI/CD automation.
+- **Placement Impact:** Cohort graduates demonstrating containerized microservices with PostgreSQL monitoring place ~35% faster than textbook-only profiles.
+- **Recommended Course Additions:** Add observability (Prometheus/OpenTelemetry) and zero-downtime blue/green deployment labs.`,
+
+  "it-software-roles-2026.md": `# IT Software Roles & Hiring Signals (2026)
+
+- **Backend Developer:** Strong preference for Java 21, Spring Boot, RESTful API design, SQL indexing, and containerized deployments.
+- **Frontend / Fullstack Developer:** TypeScript, React, automated accessibility, and end-to-end API contract safety lead technical screening criteria.
+- **Emerging Specializations:** AI Platform Engineering, LLM Application Architecture, and FinOps Cost Optimization.`,
+
+  "weekly-industry-pulse.md": `# Weekly Industry Demand Brief
+
+- Employers increasingly screen resumes with ATS keyword matching for Git workflows, automated testing, cloud deployment basics, and relational database tuning.
+- Outdated XML-heavy J2EE and SOAP topics are rapidly being deprioritized in favor of modern REST/gRPC services.`,
+};

@@ -11,7 +11,7 @@ import {
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { traineeApi, adminApi } from "../api/endpoints";
+import { traineeApi, adminApi, providerApi } from "../api/endpoints";
 import { useAuth } from "../context/useAuth";
 import { useToast } from "../components/ui/useToast";
 import {
@@ -77,6 +77,8 @@ export default function Trainees() {
   const queryClient = useQueryClient();
   const { role } = useAuth();
   const { addToast } = useToast();
+  const isAdmin = role === "ADMIN";
+  const isProvider = role === "COURSE_PROVIDER";
   const [searchParams, setSearchParams] = useSearchParams();
 
   const searchFilter = searchParams.get("search") || "";
@@ -111,8 +113,9 @@ export default function Trainees() {
     error,
     refetch,
   } = useQuery({
-    queryKey: ["trainees"],
-    queryFn: ({ signal }) => traineeApi.getAll(signal),
+    queryKey: ["trainees", role],
+    queryFn: ({ signal }) =>
+      isProvider ? providerApi.getAllTraineesReadOnly(signal) : traineeApi.getAll(signal),
     staleTime: 60000,
   });
 
@@ -215,7 +218,9 @@ export default function Trainees() {
             <Avatar fallback={row.original.fullName} size="sm" />
             <div className="min-w-0">
               <p className="font-medium text-sm text-gray-900 dark:text-gray-50 truncate">{row.original.fullName}</p>
-              <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{row.original.email}</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                {isProvider || !row.original.email ? `ID #${row.original.id}` : row.original.email}
+              </p>
             </div>
           </div>
         ),
@@ -269,7 +274,7 @@ export default function Trainees() {
             <Badge variant="outline">Pending</Badge>
           ),
       },
-      ...(role === "ADMIN"
+      ...(isAdmin
         ? [
             {
               id: "allowEmails",
@@ -301,7 +306,7 @@ export default function Trainees() {
             >
               View Profile
             </Button>
-            {(role === "ADMIN" || role === "COURSE_PROVIDER") && (
+            {isAdmin && (
               <Button
                 variant="ghost"
                 intent={Intent.DANGER}
@@ -315,7 +320,7 @@ export default function Trainees() {
         ),
       },
     ],
-    [role, navigate, emailStopMutation]
+    [isAdmin, isProvider, navigate, emailStopMutation]
   );
 
   const pageSize = 8;
@@ -352,7 +357,7 @@ export default function Trainees() {
           </p>
         </div>
 
-        {(role === "ADMIN" || role === "COURSE_PROVIDER") && (
+        {isAdmin && (
           <Button
             variant="primary"
             icon={<Plus size={14} />}

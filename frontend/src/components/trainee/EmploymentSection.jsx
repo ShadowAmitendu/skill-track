@@ -27,6 +27,7 @@ export function EmploymentDetailsSection({
   profile,
   statusMeta,
   canManage = false,
+  hideSalary = false,
   onEdit,
   onClear,
   editLabel = "Edit",
@@ -71,20 +72,24 @@ export function EmploymentDetailsSection({
           <p className="text-xs bp6-text-muted">Company</p>
           <p className="text-sm font-semibold mt-1">{profile?.companyName || "N/A"}</p>
         </div>
-        <div>
-          <p className="text-xs bp6-text-muted">Current Salary</p>
-          <p className="text-sm font-semibold mt-1 tabular-nums">
-            {profile?.currentSalary
-              ? `₹${profile.currentSalary.toLocaleString("en-IN")}`
-              : "N/A"}
-          </p>
-        </div>
-        <div className="sm:col-span-2">
-          <p className="text-xs bp6-text-muted">Salary Progression</p>
-          <p className="text-sm font-medium mt-1">
-            {profile?.salaryProgression || "Not recorded"}
-          </p>
-        </div>
+        {!hideSalary && (
+          <>
+            <div>
+              <p className="text-xs bp6-text-muted">Current Salary</p>
+              <p className="text-sm font-semibold mt-1 tabular-nums">
+                {profile?.currentSalary
+                  ? `₹${profile.currentSalary.toLocaleString("en-IN")}`
+                  : "N/A"}
+              </p>
+            </div>
+            <div className="sm:col-span-2">
+              <p className="text-xs bp6-text-muted">Salary Progression</p>
+              <p className="text-sm font-medium mt-1">
+                {profile?.salaryProgression || "Not recorded"}
+              </p>
+            </div>
+          </>
+        )}
         {(profile?.unemployedReason || (isUnemployed && emptyReasonHint)) && (
           <div className="sm:col-span-3">
             <Callout variant="warning" title="Stated Reason / Context">

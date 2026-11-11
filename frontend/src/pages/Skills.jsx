@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { courseApi, traineeApi } from "../api/endpoints";
+import { courseApi, traineeApi, providerApi } from "../api/endpoints";
 import { useAuth } from "../context/useAuth";
 import { Award, Users } from "lucide-react";
 import { Badge } from "../components/ui/Badge";
@@ -42,8 +42,11 @@ export default function Skills() {
 
   // Load trainees when admin/cp to resolve ID links & fallback drill-down if DTO omits traineeNames
   const { data: trainees = [] } = useQuery({
-    queryKey: ["trainees"],
-    queryFn: ({ signal }) => traineeApi.getAll(signal),
+    queryKey: ["trainees", role],
+    queryFn: ({ signal }) =>
+      role === "COURSE_PROVIDER"
+        ? providerApi.getAllTraineesReadOnly(signal)
+        : traineeApi.getAll(signal),
     enabled: canDrillDown,
     staleTime: 60000,
   });

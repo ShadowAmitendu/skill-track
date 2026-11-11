@@ -4,6 +4,7 @@ import {
   mockProviders,
   mockCourses,
   mockSkillCatalog,
+  mockMarketResearchDocs,
 } from "./mockData";
 import { deriveCourseCategory, hasTraineeRespondedFollowUp, isEmployedStatus } from "../utils/domain";
 
@@ -11,6 +12,58 @@ import { deriveCourseCategory, hasTraineeRespondedFollowUp, isEmployedStatus } f
 let trainees = JSON.parse(JSON.stringify(mockTrainees));
 let providers = JSON.parse(JSON.stringify(mockProviders));
 let courses = JSON.parse(JSON.stringify(mockCourses));
+
+const KNOWN_IT_SKILLS = [
+  "Java", "Python", "JavaScript", "TypeScript", "C++", "C#", "Go", "Rust", "Kotlin", "Swift",
+  "Spring Boot", "Hibernate", "Node.js", "Express", "React", "Angular", "Vue.js", "Next.js",
+  "PostgreSQL", "MySQL", "MongoDB", "Redis", "Elasticsearch", "Cassandra", "Oracle",
+  "Docker", "Kubernetes", "AWS", "Azure", "GCP", "CI/CD", "Jenkins", "Terraform", "Ansible",
+  "Git", "GitHub", "REST", "REST APIs", "GraphQL", "gRPC", "Kafka", "RabbitMQ", "Microservices",
+  "Linux", "OAuth2", "JWT", "JPA", "HTML", "CSS", "Tailwind", "Agile", "Scrum", "Cloud", "SQL Tuning",
+];
+
+/** @type {Record<string, string[]>} */
+const ROLE_SKILLS_MAP = {
+  "Backend Developer": ["Java", "Spring Boot", "PostgreSQL", "REST", "Git", "Docker", "Microservices"],
+  "Frontend Developer": ["JavaScript", "TypeScript", "React", "HTML", "CSS", "Tailwind", "Git"],
+  "Fullstack Developer": ["Java", "Spring Boot", "JavaScript", "React", "PostgreSQL", "Git", "REST"],
+  "DevOps Engineer": ["Docker", "Kubernetes", "CI/CD", "Jenkins", "AWS", "Linux", "Git"],
+  "Cloud Engineer": ["Cloud", "AWS", "GCP", "Docker", "Kubernetes", "Linux", "Microservices"],
+};
+
+function enrichCourseWithCount(course) {
+  const enrolledCount = trainees.filter(
+    (t) =>
+      (t.enrolledCourses || []).includes(course.title) ||
+      (t.completedCourses || []).includes(course.title)
+  ).length;
+  return { ...course, enrolledCount };
+}
+
+function redactTraineeForProvider(trainee) {
+  return {
+    ...trainee,
+    email: null,
+    phoneNumber: null,
+    currentSalary: null,
+    salaryProgression: null,
+  };
+}
+
+function parseResumeSkills(resumeText) {
+  if (!resumeText || !resumeText.trim()) {
+    return { totalTokens: 0, extractedSkillTokens: [], detectedTechnologies: [] };
+  }
+  const rawTokens = resumeText.split(/[\s,;./()[\]{}|:]+/).filter(Boolean);
+  const tokenSet = Array.from(new Set(rawTokens.map((t) => t.trim()).filter(Boolean)));
+  const lower = resumeText.toLowerCase();
+  const detected = KNOWN_IT_SKILLS.filter((skill) => lower.includes(skill.toLowerCase()));
+  return {
+    totalTokens: rawTokens.length,
+    extractedSkillTokens: tokenSet.slice(0, 40),
+    detectedTechnologies: detected,
+  };
+}
 
 function envelope(data, message = "Success") {
   return HttpResponse.json({
@@ -303,12 +356,12 @@ export const handlers = [
 
   // --- Courses ---
   http.get("/api/v1/courses", () => {
-    return envelope(courses);
+    return envelope(courses.map(enrichCourseWithCount));
   }),
 
   http.get("/api/v1/courses/provider/:providerId", ({ params }) => {
     const providerId = Number(params.providerId);
-    const filtered = courses.filter((c) => c.providerId === providerId);
+    const filtered = courses.filter((c) => c.providerId === providerId).map(enrichCourseWithCount);
     return envelope(filtered);
   }),
 
@@ -322,7 +375,7 @@ export const handlers = [
   }),
 
   http.get("/api/v1/providers/trainees", () => {
-    return envelope(trainees);
+    return envelope(trainees.map(redactTraineeForProvider));
   }),
 
   http.get("/api/v1/providers/:id", ({ params }) => {
@@ -346,7 +399,7 @@ export const handlers = [
       skillsTaught: body.skillsTaught || [],
     };
     courses.push(newCourse);
-    return envelope(newCourse, "Course added successfully");
+    return envelope(enrichCourseWithCount(newCourse), "Course added successfully");
   }),
 
   http.put("/api/v1/providers/courses/:courseId", async ({ params, request }) => {
@@ -360,7 +413,7 @@ export const handlers = [
         id: courseId,
         category: body.category || courses[idx].category || deriveCourseCategory(body.skillsTaught),
       };
-      return envelope(courses[idx], "Course updated successfully");
+      return envelope(enrichCourseWithCount(courses[idx]), "Course updated successfully");
     }
     return HttpResponse.json({ success: false, message: "Course not found" }, { status: 404 });
   }),
@@ -389,5 +442,146 @@ export const handlers = [
       `Quarterly update reminders sent: ${eligible} emails queued.`,
       "Quarterly reminders triggered"
     );
+  }),
+
+  // --- AI & Market Research (mirrors AiController) ---
+  http.post("/api/v1/ai/ats-extract", async ({ request }) => {
+    const raw = await request.text();
+    let resumeText = raw;
+    if (raw.startsWith('"') && raw.endsWith('"')) {
+      try {
+        resumeText = JSON.parse(raw);
+      } catch {
+        resumeText = raw;
+      }
+    }
+    return envelope(parseResumeSkills(resumeText), "Resume tokens and skills extracted");
+  }),
+
+  http.post("/api/v1/ai/skill-gap", async ({ request }) => {
+    const body = /** @type {{ targetRole?: string, resumeText?: string, currentSkills?: string[] }} */ (
+      await request.json()
+    );
+    const targetRole = (body.targetRole || "Backend Developer").trim();
+    const skillSet = new Set(
+      (body.currentSkills || []).map((s) => String(s).trim().toLowerCase())
+    );
+    if (body.resumeText) {
+      parseResumeSkills(body.resumeText).detectedTechnologies.forEach((s) =>
+        skillSet.add(s.toLowerCase())
+      );
+    }
+
+    const reqSkills =
+      ROLE_SKILLS_MAP[targetRole] || ["Java", "Spring Boot", "PostgreSQL", "Git", "REST"];
+    const matchedSkills = reqSkills.filter((r) => skillSet.has(r.toLowerCase()));
+    const missingSkills = reqSkills.filter((r) => !skillSet.has(r.toLowerCase()));
+    const matchPercentage =
+      reqSkills.length === 0 ? 0 : Math.round((matchedSkills.length / reqSkills.length) * 100);
+    const recommendedTopics = missingSkills.map((s) => `Enroll in courses teaching ${s}`);
+
+    return envelope(
+      { targetRole, matchedSkills, missingSkills, matchPercentage, recommendedTopics },
+      "Skill gap analysis completed"
+    );
+  }),
+
+  http.post("/api/v1/ai/matchmaking", async ({ request }) => {
+    const skills = /** @type {string[]} */ (await request.json()) || [];
+    const normalized = new Set(skills.map((s) => String(s).trim().toLowerCase()));
+
+    const results = Object.entries(ROLE_SKILLS_MAP)
+      .map(([roleTitle, reqs]) => {
+        const matchingSkills = reqs.filter((r) => normalized.has(r.toLowerCase()));
+        const growthAreas = reqs.filter((r) => !normalized.has(r.toLowerCase()));
+        const fitScore =
+          reqs.length === 0 ? 0 : Math.round((matchingSkills.length / reqs.length) * 100);
+        return { roleTitle, fitScore, matchingSkills, growthAreas };
+      })
+      .sort((a, b) => b.fitScore - a.fitScore);
+
+    return envelope(results, "Role matchmaking results");
+  }),
+
+  http.get("/api/v1/ai/career-trends", ({ request }) => {
+    const url = new URL(request.url);
+    const itRole = url.searchParams.get("role") || "Backend Developer";
+    return envelope(
+      {
+        itRole,
+        currentMarketTrends: [
+          `High demand for cloud-native architectures & containerization in ${itRole} teams`,
+          "Increasing adoption of asynchronous event streaming (Kafka/RabbitMQ)",
+          "AI-assisted code development and automated integration test pipelines",
+        ],
+        emergingFutureRoles: [
+          "AI Platform Engineer",
+          "Cloud Cost & FinOps Specialist",
+          "LLM Application Architect",
+        ],
+        futureCareerProspect:
+          "Strong 5-year growth trajectory with ~22% projected job creation across enterprise IT engineering.",
+        evolvingSkillDemands: [
+          "Kubernetes orchestration & multi-stage Docker builds",
+          "Observability (Prometheus, OpenTelemetry)",
+          "Vector databases and secure AI integration APIs",
+        ],
+      },
+      "IT Career trends retrieved"
+    );
+  }),
+
+  http.get("/api/v1/ai/course-improvements", ({ request }) => {
+    const url = new URL(request.url);
+    const courseTitle = url.searchParams.get("courseTitle") || "Java Backend";
+    return envelope(
+      {
+        currentCourseTitle: courseTitle,
+        suggestedCurriculumAdditions: [
+          "Hands-on Docker containerization & multi-stage production builds",
+          "Spring Boot observability with OpenTelemetry & Actuator metrics",
+          "Automated CI/CD testing and GitHub Actions deployment workflows",
+        ],
+        outdatedTopicsToRemove: [
+          "Monolithic XML-based framework configurations",
+          "Legacy SOAP web services without REST/JSON alternatives",
+        ],
+        newCourseIdeas: [
+          "Building Cloud-Native Microservices with Spring Boot & Docker",
+          "Fullstack Java & React Production Bootcamp",
+        ],
+        marketRationale:
+          `Hiring partners reviewing "${courseTitle}" emphasize hands-on containerization, automated pipelines, and production database indexing.`,
+      },
+      "Course improvement suggestions"
+    );
+  }),
+
+  http.post("/api/v1/ai/provider-chatbot", async ({ request }) => {
+    const body = /** @type {{ message?: string, courseId?: number }} */ (await request.json());
+    const msg = (body.message || "").toLowerCase();
+    const matchedCourse = body.courseId ? courses.find((c) => c.id === Number(body.courseId)) : null;
+    const courseCtx = matchedCourse ? ` for "${matchedCourse.title}"` : "";
+
+    let reply;
+    if (msg.includes("course") || msg.includes("improve") || msg.includes("syllabus")) {
+      reply = `Based on our market research repository, cohorts${courseCtx} that integrate Docker multi-stage builds, automated CI/CD, and Spring Boot REST testing achieve a 35% higher placement rate. Consider adding a capstone cloud deployment lab.`;
+    } else if (msg.includes("demand") || msg.includes("salary") || msg.includes("market")) {
+      reply = `Current market signals show strong compensation premiums${courseCtx} for Backend and Cloud Engineering trainees with PostgreSQL query tuning, Kubernetes orchestration, and REST API security credentials.`;
+    } else {
+      reply = `I am your AI Course Advisor${courseCtx}. Ask me about market demand signals, high-ROI syllabus additions, outdated topics to sunset, or cohort employability fit.`;
+    }
+
+    return envelope({ reply, timestamp: new Date().toISOString() }, "Chatbot reply");
+  }),
+
+  http.get("/api/v1/ai/market-research/documents", () => {
+    return envelope(Object.keys(mockMarketResearchDocs), "Market research documents in repository");
+  }),
+
+  http.get("/api/v1/ai/market-research/documents/:fileName", ({ params }) => {
+    const fileName = decodeURIComponent(String(params.fileName || ""));
+    const content = mockMarketResearchDocs[fileName] || `Document not found: ${fileName}`;
+    return envelope(content, "Document content");
   }),
 ];

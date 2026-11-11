@@ -17,6 +17,8 @@ import CoursesAndProviders from "./pages/CoursesAndProviders";
 import ProviderProfile from "./pages/ProviderProfile";
 import Skills from "./pages/Skills";
 import Employment from "./pages/Employment";
+import CareerInsights from "./pages/CareerInsights";
+import ProviderAiStudio from "./pages/ProviderAiStudio";
 
 function RootRedirect() {
   const { isAuthenticated } = useAuth();
@@ -85,6 +87,24 @@ export default function App() {
             element={
               <RequireRole roles={["TRAINEE"]}>
                 <MyEmployment />
+              </RequireRole>
+            }
+          />
+          <Route
+            path="/career-insights"
+            element={
+              <RequireRole roles={["TRAINEE", "ADMIN"]}>
+                <CareerInsights />
+              </RequireRole>
+            }
+          />
+
+          {/* Course Provider + Admin AI Studio */}
+          <Route
+            path="/provider-ai"
+            element={
+              <RequireRole roles={["COURSE_PROVIDER", "ADMIN"]}>
+                <ProviderAiStudio />
               </RequireRole>
             }
           />

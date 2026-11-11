@@ -154,8 +154,10 @@ export default function CoursesAndProviders() {
   });
 
   const { data: trainees = [] } = useQuery({
-    queryKey: ["trainees"],
-    queryFn: ({ signal }) => traineeApi.getAll(signal),
+    queryKey: ["trainees", role],
+    queryFn: ({ signal }) =>
+      isProvider ? providerApi.getAllTraineesReadOnly(signal) : traineeApi.getAll(signal),
+    enabled: isAdmin || isProvider,
     staleTime: 60000,
   });
 
@@ -243,7 +245,7 @@ export default function CoursesAndProviders() {
 
     const withMeta = filtered.map((course) => {
       const category = deriveCourseCategory(course.skillsTaught, course.category);
-      const popularity = coursePopularityMap[course.title] || 0;
+      const popularity = (course.enrolledCount ?? 0) || coursePopularityMap[course.title] || 0;
       const missingSkillsCount = (course.skillsTaught || []).filter(
         (s) => !currentTraineeSkills.has(s)
       ).length;
@@ -1119,7 +1121,13 @@ export default function CoursesAndProviders() {
                 placeholder="Choose enrolled trainee..."
                 options={trainees
                   .filter((t) => t.enrolledCourses?.includes(kickModalTarget?.title))
-                  .map((t) => ({ value: String(t.id), label: `${t.fullName} (${t.email})` }))}
+                  .map((t) => ({
+                    value: String(t.id),
+                    label:
+                      t.email && !isProvider
+                        ? `${t.fullName} (${t.email})`
+                        : `${t.fullName} (ID #${t.id})`,
+                  }))}
               />
             </Field>
 

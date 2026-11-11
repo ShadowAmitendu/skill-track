@@ -68,6 +68,8 @@ export function Input({
  * @param {any} [props.ref]
  * @param {string} [props.placeholder]
  * @param {string} [props.id]
+ * @param {string} [props.value]
+ * @param {(e: any) => void} [props.onChange]
  * @param {boolean} [props.disabled]
  */
 export function Textarea({

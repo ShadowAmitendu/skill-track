@@ -86,6 +86,7 @@ export default function TraineeProfile({ customId, isSelfView = false } = {}) {
   const { addToast } = useToast();
 
   const traineeId = customId || routeId;
+  const isProviderViewer = role === "COURSE_PROVIDER";
   const canManage = isSelfView || role === "ADMIN";
   const tabParam = searchParams.get("tab");
   const validTabs = isSelfView
@@ -343,13 +344,19 @@ export default function TraineeProfile({ customId, isSelfView = false } = {}) {
                 )}
               </div>
               <div className="flex items-center gap-4 text-xs bp6-text-muted mt-1 flex-wrap">
-                <span className="inline-flex items-center gap-1.5">
-                  <Mail size={13} /> {profile.email}
-                </span>
-                {profile.phoneNumber && (
-                  <span className="inline-flex items-center gap-1.5">
-                    <Phone size={13} /> {profile.phoneNumber}
-                  </span>
+                {isProviderViewer ? (
+                  <span>Trainee ID #{profile.id} • Contact & compensation redacted</span>
+                ) : (
+                  <>
+                    <span className="inline-flex items-center gap-1.5">
+                      <Mail size={13} /> {profile.email}
+                    </span>
+                    {profile.phoneNumber && (
+                      <span className="inline-flex items-center gap-1.5">
+                        <Phone size={13} /> {profile.phoneNumber}
+                      </span>
+                    )}
+                  </>
                 )}
               </div>
             </div>
@@ -395,12 +402,16 @@ export default function TraineeProfile({ customId, isSelfView = false } = {}) {
                 </div>
                 <div>
                   <p className="text-xs bp6-text-muted">Email Address</p>
-                  <p className="font-medium mt-0.5">{profile.email}</p>
+                  <p className="font-medium mt-0.5">
+                    {isProviderViewer ? "Hidden for Course Providers" : profile.email}
+                  </p>
                 </div>
                 <div>
                   <p className="text-xs bp6-text-muted">Phone Number</p>
                   <p className="font-medium mt-0.5">
-                    {profile.phoneNumber || "Not provided"}
+                    {isProviderViewer
+                      ? "Hidden for Course Providers"
+                      : profile.phoneNumber || "Not provided"}
                   </p>
                 </div>
                 {profile.projectsSummary && (
@@ -673,6 +684,7 @@ export default function TraineeProfile({ customId, isSelfView = false } = {}) {
               profile={profile}
               statusMeta={statusMeta}
               canManage={canManage}
+              hideSalary={isProviderViewer}
               onEdit={openEditDialog}
               onClear={() => setRemoveEmpModalOpen(true)}
             />

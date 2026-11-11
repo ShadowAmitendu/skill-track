@@ -58,10 +58,11 @@ import { apiClient } from "./client";
  * @property {number} id
  * @property {string} title
  * @property {string} description
- * @property {string} category
+ * @property {string} [category]
  * @property {number} providerId
  * @property {string} providerName
  * @property {string[]} skillsTaught
+ * @property {number} [enrolledCount]
  */
 
 /**
@@ -168,4 +169,108 @@ export const providerApi = {
 export const emailApi = {
   triggerQuarterlyReminders: () =>
     apiClient("/email/trigger-quarterly-reminders", { method: "POST" }),
+};
+
+/**
+ * @typedef {Object} AtsAnalysisResponseDto
+ * @property {number} totalTokens
+ * @property {string[]} extractedSkillTokens
+ * @property {string[]} detectedTechnologies
+ */
+
+/**
+ * @typedef {Object} SkillGapRequestDto
+ * @property {string} targetRole
+ * @property {string} [resumeText]
+ * @property {string[]} [currentSkills]
+ */
+
+/**
+ * @typedef {Object} SkillGapResponseDto
+ * @property {string} targetRole
+ * @property {string[]} matchedSkills
+ * @property {string[]} missingSkills
+ * @property {number} matchPercentage
+ * @property {string[]} recommendedTopics
+ */
+
+/**
+ * @typedef {Object} RoleMatchmakingResponseDto
+ * @property {string} roleTitle
+ * @property {number} fitScore
+ * @property {string[]} matchingSkills
+ * @property {string[]} growthAreas
+ */
+
+/**
+ * @typedef {Object} CareerTrendsResponseDto
+ * @property {string} itRole
+ * @property {string[]} currentMarketTrends
+ * @property {string[]} emergingFutureRoles
+ * @property {string} futureCareerProspect
+ * @property {string[]} evolvingSkillDemands
+ */
+
+/**
+ * @typedef {Object} CourseImprovementDto
+ * @property {string} currentCourseTitle
+ * @property {string[]} suggestedCurriculumAdditions
+ * @property {string[]} outdatedTopicsToRemove
+ * @property {string[]} newCourseIdeas
+ * @property {string} marketRationale
+ */
+
+/**
+ * @typedef {Object} ChatRequestDto
+ * @property {string} message
+ * @property {number} [providerId]
+ * @property {number} [courseId]
+ */
+
+/**
+ * @typedef {Object} ChatResponseDto
+ * @property {string} reply
+ * @property {string} [timestamp]
+ */
+
+// ==========================================
+// AI Endpoints (mirrors AiController)
+// ==========================================
+export const aiApi = {
+  /** @param {string} resumeText @returns {Promise<AtsAnalysisResponseDto>} */
+  atsExtract: (resumeText) =>
+    apiClient("/ai/ats-extract", {
+      method: "POST",
+      body: resumeText,
+      rawBody: true,
+      headers: { "Content-Type": "text/plain" },
+    }),
+
+  /** @param {SkillGapRequestDto} dto @returns {Promise<SkillGapResponseDto>} */
+  analyzeSkillGap: (dto) =>
+    apiClient("/ai/skill-gap", { method: "POST", body: dto }),
+
+  /** @param {string[]} skills @returns {Promise<RoleMatchmakingResponseDto[]>} */
+  matchRoles: (skills) =>
+    apiClient("/ai/matchmaking", { method: "POST", body: skills }),
+
+  /** @param {string} [role] @param {AbortSignal} [signal] @returns {Promise<CareerTrendsResponseDto>} */
+  getCareerTrends: (role = "Backend Developer", signal) =>
+    apiClient(`/ai/career-trends?role=${encodeURIComponent(role)}`, { signal }),
+
+  /** @param {string} [courseTitle] @param {AbortSignal} [signal] @returns {Promise<CourseImprovementDto>} */
+  suggestCourseImprovements: (courseTitle = "Java Backend", signal) =>
+    apiClient(`/ai/course-improvements?courseTitle=${encodeURIComponent(courseTitle)}`, { signal }),
+
+  /** @param {ChatRequestDto} dto @returns {Promise<ChatResponseDto>} */
+  providerChatbot: (dto) =>
+    apiClient("/ai/provider-chatbot", { method: "POST", body: dto }),
+
+  /** @param {AbortSignal} [signal] @returns {Promise<string[]>} */
+  listMarketResearchDocs: (signal) =>
+    apiClient("/ai/market-research/documents", { signal }),
+
+  /** @param {string} fileName @param {AbortSignal} [signal] @returns {Promise<string>} */
+  readMarketResearchDoc: (fileName, signal) =>
+    apiClient(`/ai/market-research/documents/${encodeURIComponent(fileName)}`, { signal }),
 };

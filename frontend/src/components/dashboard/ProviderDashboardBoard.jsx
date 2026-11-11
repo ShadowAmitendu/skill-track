@@ -12,6 +12,7 @@ import {
   Building2,
   BriefcaseBusiness,
   ArrowRight,
+  Sparkles,
 } from "lucide-react";
 import {
   BarChart,
@@ -171,6 +172,11 @@ export function ProviderDashboardBoard() {
           <Link to={`/providers/${providerId}`}>
             <Button variant="outline" icon={<Building2 size={14} />}>
               Provider Profile
+            </Button>
+          </Link>
+          <Link to="/provider-ai">
+            <Button variant="outline" icon={<Sparkles size={14} />}>
+              Course AI Studio
             </Button>
           </Link>
           <Link to={`/courses?provider=${providerId}`}>

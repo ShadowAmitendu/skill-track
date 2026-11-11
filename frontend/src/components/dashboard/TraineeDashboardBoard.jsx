@@ -48,12 +48,6 @@ export function TraineeDashboardBoard() {
     staleTime: 60000,
   });
 
-  const { data: allTrainees = [] } = useQuery({
-    queryKey: ["trainees"],
-    queryFn: ({ signal }) => traineeApi.getAll(signal),
-    staleTime: 60000,
-  });
-
   const enrollMutation = useMutation({
     mutationFn: (courseId) => traineeApi.enroll(traineeId, courseId),
     onSuccess: () => {
@@ -72,16 +66,6 @@ export function TraineeDashboardBoard() {
     const totalCourses = enrolledList.length + completedList.length;
     const pct = totalCourses > 0 ? Math.round((completedList.length / totalCourses) * 100) : 0;
 
-    const popularityMap = {};
-    allTrainees.forEach((t) => {
-      (t.enrolledCourses || []).forEach((title) => {
-        popularityMap[title] = (popularityMap[title] || 0) + 1;
-      });
-      (t.completedCourses || []).forEach((title) => {
-        popularityMap[title] = (popularityMap[title] || 0) + 1;
-      });
-    });
-
     const ownedSkills = new Set(profile?.skills || []);
     const takenSet = new Set([...enrolledList, ...completedList]);
 
@@ -89,7 +73,7 @@ export function TraineeDashboardBoard() {
       .filter((c) => !takenSet.has(c.title))
       .map((c) => {
         const newSkills = (c.skillsTaught || []).filter((s) => !ownedSkills.has(s));
-        const popularity = popularityMap[c.title] || 0;
+        const popularity = c.enrolledCount ?? 0;
         return {
           ...c,
           newSkills,
@@ -101,7 +85,7 @@ export function TraineeDashboardBoard() {
       .slice(0, 4);
 
     return { completionPct: pct, recommendedCourses: ranked };
-  }, [profile, courses, allTrainees]);
+  }, [profile, courses]);
 
   if (profileLoading || coursesLoading) {
     return <LoadingState label="Loading your trainee dashboard..." rows={4} />;
@@ -138,6 +122,11 @@ export function TraineeDashboardBoard() {
           <Link to="/me">
             <Button variant="outline" icon={<UserCheck size={14} />}>
               Edit My Profile
+            </Button>
+          </Link>
+          <Link to="/career-insights">
+            <Button variant="outline" icon={<Sparkles size={14} />}>
+              Career AI
             </Button>
           </Link>
           <Link to="/courses">

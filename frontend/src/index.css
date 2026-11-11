@@ -132,8 +132,30 @@
     height: 16px;
   }
 
+  .bp6-section-header {
+    flex-wrap: wrap;
+    height: auto;
+    min-height: 40px;
+    gap: 8px;
+  }
+
   .bp6-section-header-left {
     align-items: center;
+    min-width: 0;
+  }
+
+  .bp6-section-header-right {
+    flex-wrap: wrap;
+    max-width: 100%;
+  }
+
+  .bp6-tabs {
+    max-width: 100%;
+  }
+
+  .bp6-tab-list {
+    max-width: 100%;
+    overflow-x: auto;
   }
 
   svg.lucide {

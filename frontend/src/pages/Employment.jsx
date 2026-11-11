@@ -8,7 +8,8 @@ import {
   getPaginationRowModel,
   flexRender,
 } from "@tanstack/react-table";
-import { traineeApi } from "../api/endpoints";
+import { traineeApi, providerApi } from "../api/endpoints";
+import { useAuth } from "../context/useAuth";
 import {
   AlertCircle,
   Eye,
@@ -40,6 +41,8 @@ import {
 
 export default function Employment() {
   const navigate = useNavigate();
+  const { role } = useAuth();
+  const isProvider = role === "COURSE_PROVIDER";
   const [searchParams, setSearchParams] = useSearchParams();
 
   const statusFilter = searchParams.get("status") || "ALL";
@@ -70,8 +73,9 @@ export default function Employment() {
     error,
     refetch,
   } = useQuery({
-    queryKey: ["trainees"],
-    queryFn: ({ signal }) => traineeApi.getAll(signal),
+    queryKey: ["trainees", role],
+    queryFn: ({ signal }) =>
+      isProvider ? providerApi.getAllTraineesReadOnly(signal) : traineeApi.getAll(signal),
     staleTime: 60000,
   });
 
@@ -137,14 +141,14 @@ export default function Employment() {
       return matchSearch && matchStatus;
     });
 
-    if (sortBy === "salary") {
+    if (sortBy === "salary" && !isProvider) {
       return [...result].sort((a, b) => (b.currentSalary || 0) - (a.currentSalary || 0));
     }
     if (sortBy === "role") {
       return [...result].sort((a, b) => (a.currentRole || "").localeCompare(b.currentRole || ""));
     }
     return [...result].sort((a, b) => (a.fullName || "").localeCompare(b.fullName || ""));
-  }, [trainees, search, statusFilter, sortBy]);
+  }, [trainees, search, statusFilter, sortBy, isProvider]);
 
   const columns = useMemo(
     () => [
@@ -179,22 +183,26 @@ export default function Employment() {
           </div>
         ),
       },
-      {
-        accessorKey: "currentSalary",
-        header: "Compensation",
-        cell: ({ row }) => (
-          <div className="text-xs">
-            <p className="font-medium text-gray-900 dark:text-gray-100 tabular-nums">
-              {row.original.currentSalary
-                ? `₹${row.original.currentSalary.toLocaleString("en-IN")}`
-                : "N/A"}
-            </p>
-            {row.original.salaryProgression && (
-              <p className="text-gray-500 dark:text-gray-400">{row.original.salaryProgression}</p>
-            )}
-          </div>
-        ),
-      },
+      ...(!isProvider
+        ? [
+            {
+              accessorKey: "currentSalary",
+              header: "Compensation",
+              cell: ({ row }) => (
+                <div className="text-xs">
+                  <p className="font-medium text-gray-900 dark:text-gray-100 tabular-nums">
+                    {row.original.currentSalary
+                      ? `₹${row.original.currentSalary.toLocaleString("en-IN")}`
+                      : "N/A"}
+                  </p>
+                  {row.original.salaryProgression && (
+                    <p className="text-gray-500 dark:text-gray-400">{row.original.salaryProgression}</p>
+                  )}
+                </div>
+              ),
+            },
+          ]
+        : []),
       {
         accessorKey: "unemployedReason",
         header: "Notes / Context",
@@ -223,7 +231,7 @@ export default function Employment() {
         ),
       },
     ],
-    [navigate]
+    [navigate, isProvider]
   );
 
   const pageSize = 8;
@@ -433,12 +441,12 @@ export default function Employment() {
 
           <div className="w-full sm:w-48">
             <Select
-              value={sortBy}
+              value={isProvider && sortBy === "salary" ? "name" : sortBy}
               onValueChange={(val) => updateParams({ sort: val })}
               options={[
                 { value: "name", label: "Sort: Trainee Name" },
                 { value: "role", label: "Sort: Job Role" },
-                { value: "salary", label: "Sort: Highest Salary" },
+                ...(!isProvider ? [{ value: "salary", label: "Sort: Highest Salary" }] : []),
               ]}
             />
           </div>

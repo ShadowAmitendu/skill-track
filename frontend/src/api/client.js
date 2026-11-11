@@ -20,11 +20,11 @@ export class ApiError extends Error {
 
 /**
  * @param {string} endpoint
- * @param {{ method?: string, body?: any, headers?: Record<string, string>, signal?: AbortSignal, timeoutMs?: number }} [options]
+ * @param {{ method?: string, body?: any, rawBody?: boolean, headers?: Record<string, string>, signal?: AbortSignal, timeoutMs?: number }} [options]
  */
 export async function apiClient(
   endpoint,
-  { method = "GET", body, headers = {}, signal, timeoutMs = DEFAULT_TIMEOUT_MS } = {}
+  { method = "GET", body, rawBody = false, headers = {}, signal, timeoutMs = DEFAULT_TIMEOUT_MS } = {}
 ) {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
@@ -37,16 +37,22 @@ export async function apiClient(
   const cleanEndpoint = endpoint.startsWith("/") ? endpoint : `/${endpoint}`;
   const url = `${BASE_URL}${cleanEndpoint}`;
 
+  const hasContentType = Object.keys(headers).some(
+    (k) => k.toLowerCase() === "content-type"
+  );
+
   try {
     const response = await fetch(url, {
       method,
       signal: controller.signal,
       headers: {
         Accept: "application/json",
-        ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
+        ...(body !== undefined && !hasContentType
+          ? { "Content-Type": rawBody ? "text/plain" : "application/json" }
+          : {}),
         ...headers,
       },
-      ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+      ...(body !== undefined ? { body: rawBody ? String(body) : JSON.stringify(body) } : {}),
     });
 
     clearTimeout(timeoutId);

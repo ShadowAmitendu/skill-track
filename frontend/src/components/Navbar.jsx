@@ -25,6 +25,7 @@ import {
   Radio,
   Sun,
   Moon,
+  Sparkles,
 } from "lucide-react";
 import { Avatar } from "./ui/Avatar";
 import { Badge } from "./ui/Badge";
@@ -62,6 +63,7 @@ export function Navbar() {
         { name: "Courses", path: "/courses", icon: GraduationCap },
         { name: "Skills", path: "/skills", icon: Award },
         { name: "Employment", path: "/employment", icon: BriefcaseBusiness },
+        { name: "Course AI", path: "/provider-ai", icon: Sparkles },
       ];
     }
 
@@ -70,6 +72,7 @@ export function Navbar() {
       { name: "Courses", path: "/courses", icon: GraduationCap },
       { name: "Skills", path: "/skills", icon: Award },
       { name: "My Employment", path: "/my-employment", icon: BriefcaseBusiness },
+      { name: "Career AI", path: "/career-insights", icon: Sparkles },
     ];
   };
 

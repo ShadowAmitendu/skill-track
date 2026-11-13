@@ -1,47 +1,24 @@
--- ============================================================
--- SKILL-TRACK: CORE SERVICE COMPLETE DATABASE SCHEMA (POSTGRESQL)
--- ============================================================
--- Key Architectural Features:
--- 1. Unified Authentication (`users`) with Shared Primary Keys (`id`)
---    across 1-to-1 tables (`trainees`, `trainee_address`,
---    `course_providers`, `trainee_resumes`).
--- 2. Course Provider Onboarding & Approval Queue (`is_approved` + `is_active`).
--- 3. Native PostgreSQL ENUM types for Education and Domain Categories.
--- 4. Skills, Categories & Course-Skill Tagging (`course_skills`).
--- 5. Course Enrolments with Mandatory Drop/Kick Reasons (`TEXT`).
--- 6. Certifications, Projects & AI/ATS Resume Tokens (`JSONB`).
--- 7. Roles & Target Roles Mapping.
--- 8. Employment Records, Salary History & Automated Follow-ups.
--- 9. B-Tree & Partial Indexes for High-Performance Queries.
--- ============================================================
-
--- Drop existing tables and types in reverse dependency order for clean re-runs
-DROP TABLE IF EXISTS trainee_resumes CASCADE;
-DROP TABLE IF EXISTS trainee_projects CASCADE;
-DROP TABLE IF EXISTS trainee_target_roles CASCADE;
-DROP TABLE IF EXISTS role_required_skills CASCADE;
-DROP TABLE IF EXISTS roles CASCADE;
-DROP TABLE IF EXISTS follow_ups CASCADE;
-DROP TABLE IF EXISTS salary_history CASCADE;
-DROP TABLE IF EXISTS employment_records CASCADE;
-DROP TABLE IF EXISTS employers CASCADE;
-DROP TABLE IF EXISTS certifications CASCADE;
-DROP TABLE IF EXISTS trainee_skills CASCADE;
-DROP TABLE IF EXISTS course_enrolments CASCADE;
-DROP TABLE IF EXISTS course_skills CASCADE;
-DROP TABLE IF EXISTS courses CASCADE;
-DROP TABLE IF EXISTS skills CASCADE;
-DROP TABLE IF EXISTS course_providers CASCADE;
-DROP TABLE IF EXISTS trainee_address CASCADE;
-DROP TABLE IF EXISTS trainees CASCADE;
-DROP TABLE IF EXISTS users CASCADE;
-DROP TYPE IF EXISTS education_level CASCADE;
-DROP TYPE IF EXISTS domain_category CASCADE;
-
-
--- ============================================================
--- 1. CUSTOM TYPES & USERS (UNIFIED AUTHENTICATION)
--- ============================================================
+DROP TABLE IF EXISTS trainee_resumes CASCADE;--
+DROP TABLE IF EXISTS trainee_projects CASCADE;--
+DROP TABLE IF EXISTS trainee_target_roles CASCADE;--
+DROP TABLE IF EXISTS role_required_skills CASCADE;--
+DROP TABLE IF EXISTS roles CASCADE;--
+DROP TABLE IF EXISTS follow_ups CASCADE;--
+DROP TABLE IF EXISTS salary_history CASCADE;--
+DROP TABLE IF EXISTS employment_records CASCADE;--
+DROP TABLE IF EXISTS employers CASCADE;--
+DROP TABLE IF EXISTS certifications CASCADE;--
+DROP TABLE IF EXISTS trainee_skills CASCADE;--
+DROP TABLE IF EXISTS course_enrolments CASCADE;--
+DROP TABLE IF EXISTS course_skills CASCADE;--
+DROP TABLE IF EXISTS courses CASCADE;--
+DROP TABLE IF EXISTS skills CASCADE;--
+DROP TABLE IF EXISTS course_providers CASCADE;--
+DROP TABLE IF EXISTS trainee_address CASCADE;--
+DROP TABLE IF EXISTS trainees CASCADE;--
+DROP TABLE IF EXISTS users CASCADE;--
+DROP TYPE IF EXISTS education_level CASCADE;--
+DROP TYPE IF EXISTS domain_category CASCADE;--
 
 CREATE TYPE education_level AS ENUM (
     '10TH',
@@ -51,9 +28,7 @@ CREATE TYPE education_level AS ENUM (
     'PHD'
 );
 
--- Standardized categories for courses, skills, and roles
 CREATE TYPE domain_category AS ENUM (
--- Core Software & Web
     'SOFTWARE_ENGINEERING',
     'WEB_DEVELOPMENT',
     'MOBILE_DEVELOPMENT',
@@ -77,7 +52,6 @@ CREATE TYPE domain_category AS ENUM (
     'QA_TESTING'
 );
 
--- Unified login table for Admin, Course Provider, and Trainee.
 CREATE TABLE users (
     id            BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     email         VARCHAR(255) UNIQUE NOT NULL,
@@ -89,13 +63,7 @@ CREATE TABLE users (
     updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-
--- ============================================================
--- 2. TRAINEES & ADDRESS (SHARED PRIMARY KEY WITH USERS)
--- ============================================================
-
 CREATE TABLE trainees (
-    -- Shared Primary Key: uses the exact same id generated in users(id)
     id                             BIGINT PRIMARY KEY
                                    REFERENCES users(id) ON DELETE CASCADE,
     name                           VARCHAR(150) NOT NULL,
@@ -103,33 +71,24 @@ CREATE TABLE trainees (
     last_educational_qualification education_level,
     phone_primary                  VARCHAR(20) NOT NULL,
     phone_secondary                VARCHAR(20),
-
-    -- Current employment snapshot for immediate dashboard & employment filtering
     current_employment_status      VARCHAR(30) NOT NULL DEFAULT 'NOT_EMPLOYED'
                                    CHECK (current_employment_status IN (
                                        'FULL_TIME', 'PART_TIME', 'INTERNSHIP',
                                        'SELF_EMPLOYED', 'NOT_EMPLOYED'
                                    )),
     non_placement_reason           TEXT,
-
-    -- Consent flag: if FALSE, outcome-tracking data (employment/salary/follow-ups) is not kept
     data_tracking_consent          BOOLEAN NOT NULL DEFAULT FALSE,
-
-    -- Soft-removal tracking when an Admin removes a trainee (with mandatory reason)
     is_removed                     BOOLEAN NOT NULL DEFAULT FALSE,
     removal_reason                 TEXT,
     removed_at                     TIMESTAMPTZ,
-
     created_at                     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at                     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 
-    -- Enforces that removal_reason cannot be NULL when is_removed is TRUE
     CONSTRAINT chk_trainee_removal_reason
         CHECK (NOT is_removed OR removal_reason IS NOT NULL)
 );
 
 CREATE TABLE trainee_address (
-    -- Shared Primary Key: 1-to-1 with trainees(id) (which is also users(id))
     id           BIGINT PRIMARY KEY
                  REFERENCES trainees(id) ON DELETE CASCADE,
     address_line VARCHAR(250) NOT NULL,
@@ -141,13 +100,7 @@ CREATE TABLE trainee_address (
     updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-
--- ============================================================
--- 3. COURSE PROVIDERS, SKILLS & COURSES
--- ============================================================
-
 CREATE TABLE course_providers (
-    -- Shared Primary Key: uses the exact same id generated in users(id)
     id            BIGINT PRIMARY KEY
                   REFERENCES users(id) ON DELETE CASCADE,
     name          VARCHAR(200) NOT NULL,
@@ -156,8 +109,6 @@ CREATE TABLE course_providers (
     phone         VARCHAR(20) NOT NULL,
     description   TEXT,
     website_url   VARCHAR(255),
-
-    -- Verification queue flag: FALSE while pending Admin review, TRUE once approved
     is_approved   BOOLEAN NOT NULL DEFAULT FALSE,
 
     created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -185,17 +136,11 @@ CREATE TABLE courses (
     updated_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Junction table: maps multiple skills taught by a course (skill tags)
 CREATE TABLE course_skills (
     course_id BIGINT NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
     skill_id  BIGINT NOT NULL REFERENCES skills(id) ON DELETE CASCADE,
     PRIMARY KEY (course_id, skill_id)
 );
-
-
--- ============================================================
--- 4. ENROLMENTS, SKILLS, CERTIFICATIONS, PROJECTS & RESUMES
--- ============================================================
 
 CREATE TABLE course_enrolments (
     id                 BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -207,8 +152,6 @@ CREATE TABLE course_enrolments (
                        CHECK (status IN ('IN_PROGRESS', 'COMPLETED', 'DROPPED', 'KICKED')),
     termination_reason TEXT,
     updated_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-
-    -- Enforces that dropping out or kicking a trainee requires a reason
     CONSTRAINT chk_enrolment_termination_reason
         CHECK (status NOT IN ('DROPPED', 'KICKED') OR termination_reason IS NOT NULL),
     CONSTRAINT chk_enrolment_dates
@@ -247,18 +190,12 @@ CREATE TABLE trainee_projects (
 );
 
 CREATE TABLE trainee_resumes (
-    -- Shared Primary Key: 1 active resume per trainee (matches trainees.id / users.id)
     id               BIGINT PRIMARY KEY
                      REFERENCES trainees(id) ON DELETE CASCADE,
     file_s3_key      VARCHAR(500) NOT NULL,
     extracted_tokens JSONB,
     uploaded_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-
-
--- ============================================================
--- 5. ROLES & TARGET ROLES
--- ============================================================
 
 CREATE TABLE roles (
     id          BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -267,8 +204,6 @@ CREATE TABLE roles (
     description TEXT
 );
 
--- Composite PK (role_id, skill_id) allows a role to require many skills
--- and a skill to belong to many roles without duplicate pairs.
 CREATE TABLE role_required_skills (
     role_id              BIGINT NOT NULL REFERENCES roles(id) ON DELETE CASCADE,
     skill_id             BIGINT NOT NULL REFERENCES skills(id) ON DELETE CASCADE,
@@ -284,11 +219,6 @@ CREATE TABLE trainee_target_roles (
         CHECK (target_level IN ('INTERN', 'ENTRY_LEVEL', 'JUNIOR', 'MID_LEVEL', 'SENIOR')),
     PRIMARY KEY (trainee_id, role_id)
 );
-
-
--- ============================================================
--- 6. EMPLOYMENT, SALARY HISTORY & FOLLOW-UPS
--- ============================================================
 
 CREATE TABLE employers (
     id                  BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -340,54 +270,41 @@ CREATE TABLE follow_ups (
                       CHECK (response_status IN ('PENDING', 'COMPLETED', 'NO_RESPONSE'))
 );
 
-
--- ============================================================
--- 7. INDEXES FOR PERFORMANCE OPTIMISATION
--- ============================================================
-
--- User role filtering
 CREATE INDEX idx_users_role ON users(role);
 
 CREATE INDEX idx_certifications_trainee ON certifications(trainee_id);
 
 CREATE INDEX idx_resumes_extracted_tokens ON trainee_resumes USING GIN (extracted_tokens);
 
--- Partial index: fast lookup of unapproved Course Providers on Admin login
 CREATE INDEX idx_course_providers_unapproved
     ON course_providers(id)
     WHERE NOT is_approved;
 
--- Trainee filtering & dashboard aggregations
 CREATE INDEX idx_trainees_employment_status
     ON trainees(current_employment_status)
     WHERE NOT is_removed;
 CREATE INDEX idx_trainees_tracking_consent ON trainees(data_tracking_consent);
 CREATE INDEX idx_address_district ON trainee_address(district);
 
--- Course & skill lookups
 CREATE INDEX idx_courses_provider ON courses(provider_id);
 CREATE INDEX idx_courses_category ON courses(category);
 CREATE INDEX idx_skills_category ON skills(category);
 CREATE INDEX idx_course_skills_skill ON course_skills(skill_id);
 CREATE INDEX idx_trainee_skills_skill ON trainee_skills(skill_id);
 
--- Enrolments, certifications & projects
 CREATE INDEX idx_enrolments_trainee ON course_enrolments(trainee_id);
 CREATE INDEX idx_enrolments_course ON course_enrolments(course_id);
 CREATE INDEX idx_enrolments_status ON course_enrolments(status);
 CREATE INDEX idx_certifications_course ON certifications(course_id);
 CREATE INDEX idx_projects_trainee ON trainee_projects(trainee_id);
 
--- Employment & salary progression
 CREATE INDEX idx_employment_trainee ON employment_records(trainee_id);
 CREATE INDEX idx_employment_employer ON employment_records(employer_id);
 CREATE INDEX idx_employment_role_title ON employment_records(role_title);
 CREATE INDEX idx_salary_employment ON salary_history(employment_id);
 
--- Follow-ups
 CREATE INDEX idx_followups_trainee ON follow_ups(trainee_id);
 CREATE INDEX idx_followups_response ON follow_ups(response_status);
 
--- Role skill mapping
 CREATE INDEX idx_role_req_skills_skill ON role_required_skills(skill_id);
 CREATE INDEX idx_target_roles_role ON trainee_target_roles(role_id);

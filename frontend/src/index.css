@@ -1,82 +1,182 @@
-@import "tailwindcss";
+@layer theme, base, blueprint, components, utilities;
 
-:root {
-  font-family:
-    Inter,
-    ui-sans-serif,
-    system-ui,
-    -apple-system,
-    BlinkMacSystemFont,
-    "Segoe UI",
-    sans-serif;
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/preflight.css" layer(base);
+@import "normalize.css/normalize.css" layer(base);
+@import "@blueprintjs/core/lib/css/blueprint.css" layer(blueprint);
+@import "@blueprintjs/icons/lib/css/blueprint-icons.css" layer(blueprint);
+@import "@blueprintjs/select/lib/css/blueprint-select.css" layer(blueprint);
+@import "tailwindcss/utilities.css" layer(utilities);
 
-  color: #14213d;
-  background: #f7faff;
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans:
+    "Inter Variable", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+    "Segoe UI", Roboto, sans-serif;
 }
 
-* {
-  box-sizing: border-box;
+@layer base {
+  :root {
+    color-scheme: light;
+  }
+
+  :root.dark {
+    color-scheme: dark;
+  }
+
+  body {
+    position: relative;
+    margin: 0;
+    min-width: 320px;
+    min-height: 100vh;
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    background-color: #f6f7f9;
+    color: #1c2127;
+  }
+
+  :root.dark body,
+  :root.bp6-dark body {
+    background-color: #1c2127;
+    color: #f6f7f9;
+  }
 }
 
-html {
-  scroll-behavior: smooth;
+@layer components {
+  body,
+  .bp6-heading,
+  .bp6-ui-text,
+  .bp6-button,
+  .bp6-input,
+  .bp6-input-group,
+  .bp6-dialog,
+  .bp6-card,
+  .bp6-section,
+  .bp6-section-card,
+  .bp6-segmented-control,
+  .bp6-alert,
+  .bp6-entity-title,
+  .bp6-form-group,
+  .bp6-select,
+  .bp6-control-group,
+  .bp6-menu,
+  .bp6-tab,
+  .bp6-tag,
+  .bp6-toast,
+  .bp6-popover-content,
+  .bp6-control,
+  .bp6-navbar,
+  .bp6-html-table,
+  .bp6-callout,
+  .bp6-non-ideal-state {
+    font-family: var(--font-sans);
+  }
+
+  p {
+    margin: 0;
+  }
+
+  a,
+  a:hover,
+  .bp6-dark a,
+  .bp6-dark a:hover {
+    color: inherit;
+    text-decoration: none;
+  }
+
+  table.bp6-html-table th,
+  table.bp6-html-table td {
+    vertical-align: middle;
+  }
+
+  /* Center Blueprint v6 icons cleanly across headings, controls, and inline labels */
+  .bp6-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    vertical-align: middle;
+    line-height: 1;
+  }
+
+  .bp6-entity-title-icon-container {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+    min-height: 18px;
+  }
+
+  .bp6-entity-title:has(h1) > .bp6-entity-title-icon-container {
+    height: 40px;
+  }
+
+  .bp6-entity-title:has(h2) > .bp6-entity-title-icon-container {
+    height: 32px;
+  }
+
+  .bp6-entity-title:has(h3) > .bp6-entity-title-icon-container {
+    height: 25px;
+  }
+
+  .bp6-entity-title:has(h4) > .bp6-entity-title-icon-container {
+    height: 21px;
+  }
+
+  .bp6-entity-title:has(h5) > .bp6-entity-title-icon-container {
+    height: 19px;
+  }
+
+  .bp6-entity-title:has(h6) > .bp6-entity-title-icon-container {
+    height: 16px;
+  }
+
+  .bp6-section-header {
+    flex-wrap: wrap;
+    height: auto;
+    min-height: 40px;
+    gap: 8px;
+  }
+
+  .bp6-section-header-left {
+    align-items: center;
+    min-width: 0;
+  }
+
+  .bp6-section-header-right {
+    flex-wrap: wrap;
+    max-width: 100%;
+  }
+
+  .bp6-tabs {
+    max-width: 100%;
+  }
+
+  .bp6-tab-list {
+    max-width: 100%;
+    overflow-x: auto;
+  }
+
+  svg.lucide {
+    flex-shrink: 0;
+  }
+
+  :is(a, span, p, label, div).inline-flex:not(.bp6-button):not(.bp6-tag):not(.bp6-icon) > svg.lucide,
+  :is(h1, h2, h3, h4, h5).flex > svg.lucide {
+    transform: translateY(-0.5px);
+  }
 }
 
-body {
-  margin: 0;
-  min-width: 320px;
-  min-height: 100vh;
-
-  background:
-    radial-gradient(
-      circle at 85% 0%,
-      rgba(96, 165, 250, 0.14),
-      transparent 28%
-    ),
-    radial-gradient(
-      circle at 100% 55%,
-      rgba(129, 140, 248, 0.08),
-      transparent 30%
-    ),
-    linear-gradient(
-      135deg,
-      #ffffff 0%,
-      #f8fbff 48%,
-      #f3f7ff 100%
-    );
+@layer utilities {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0ms !important;
+    animation-duration: 0ms !important;
+  }
 }
 
-button,
-input,
-select {
-  font: inherit;
-}
-
-button {
-  cursor: pointer;
-}
-
-::selection {
-  background: rgba(59, 130, 246, 0.18);
-  color: #1e3a8a;
-}
-
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-
-::-webkit-scrollbar-track {
-  background: #f1f5f9;
-}
-
-::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
-  border-radius: 999px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
+#root {
+  isolation: isolate;
 }

@@ -2,6 +2,7 @@ import { Routes, Route, Navigate, Link } from "react-router-dom";
 import { NonIdealState } from "@blueprintjs/core";
 import { useAuth } from "./context/useAuth";
 import { Navbar } from "./components/Navbar";
+import { Footer } from "./components/Footer";
 import { RequireRole } from "./components/RequireRole";
 import { Card } from "./components/ui/Card";
 import { Button } from "./components/ui/Button";
@@ -27,11 +28,13 @@ function RootRedirect() {
 }
 
 export default function App() {
+  const { isAuthenticated } = useAuth();
+
   return (
     <div className="min-h-screen flex flex-col bg-[#f6f7f9] text-[#1c2127] dark:bg-[#1c2127] dark:text-[#f6f7f9]">
       <Navbar />
 
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      <main className="min-w-0 flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
         <Routes>
           <Route path="/" element={<RootRedirect />} />
           <Route path="/login" element={<Login />} />
@@ -137,6 +140,7 @@ export default function App() {
           />
         </Routes>
       </main>
+      <Footer isAuthenticated={isAuthenticated} />
     </div>
   );
 }

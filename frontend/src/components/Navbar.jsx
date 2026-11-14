@@ -39,12 +39,7 @@ export function Navbar() {
   const location = useLocation();
 
   const getNavLinks = () => {
-    if (!isAuthenticated) {
-      return [
-        { name: "Courses", path: "/courses", icon: GraduationCap },
-        { name: "Skills", path: "/skills", icon: Award },
-      ];
-    }
+    if (!isAuthenticated) return [];
 
     if (role === "ADMIN") {
       return [
@@ -127,26 +122,28 @@ export function Navbar() {
               </Link>
             </NavbarHeading>
 
-            <NavbarDivider className="hidden md:block" />
+            {navLinks.length > 0 && <NavbarDivider className="hidden xl:block" />}
 
-            <nav className="hidden md:flex items-center gap-1">
-              {navLinks.map((item) => {
-                const NavIcon = item.icon;
-                const active = isNavItemActive(item.path);
-                return (
-                  <Link key={item.path} to={item.path} className="shrink-0">
-                    <Button
-                      variant="minimal"
-                      active={active}
-                      intent={active ? Intent.PRIMARY : Intent.NONE}
-                      icon={<NavIcon size={14} />}
-                    >
-                      {item.name}
-                    </Button>
-                  </Link>
-                );
-              })}
-            </nav>
+            {navLinks.length > 0 && (
+              <nav className="hidden xl:flex items-center gap-1">
+                {navLinks.map((item) => {
+                  const NavIcon = item.icon;
+                  const active = isNavItemActive(item.path);
+                  return (
+                    <Link key={item.path} to={item.path} className="shrink-0">
+                      <Button
+                        variant="minimal"
+                        active={active}
+                        intent={active ? Intent.PRIMARY : Intent.NONE}
+                        icon={<NavIcon size={14} />}
+                      >
+                        {item.name}
+                      </Button>
+                    </Link>
+                  );
+                })}
+              </nav>
+            )}
           </NavbarGroup>
 
           <NavbarGroup align={Alignment.END} className="shrink-0 gap-2">
@@ -163,47 +160,51 @@ export function Navbar() {
               </Tag>
             )}
 
-            <Button
-              variant="outlined"
-              onClick={toggleTheme}
-              aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
-              title={isDark ? "Switch to light mode" : "Switch to dark mode"}
-              icon={isDark ? <Sun size={14} /> : <Moon size={14} />}
-            />
+            {isAuthenticated && (
+              <Button
+                variant="outlined"
+                onClick={toggleTheme}
+                aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
+                title={isDark ? "Switch to light mode" : "Switch to dark mode"}
+                icon={isDark ? <Sun size={14} /> : <Moon size={14} />}
+              />
+            )}
 
             {/* Mobile Navigation Menu */}
-            <div className="md:hidden">
-              <Menu>
-                <MenuTrigger
-                  render={(props) => (
-                    <Button
-                      {...props}
-                      variant="outlined"
-                      aria-label="Open navigation menu"
-                      icon={<MenuIcon size={14} />}
-                    />
-                  )}
-                />
-                <MenuContent align="end">
-                  {navLinks.map((item) => {
-                    const NavIcon = item.icon;
-                    return (
-                      <MenuItem
-                        key={item.path}
-                        icon={<NavIcon size={14} />}
-                        active={isNavItemActive(item.path)}
-                        onClick={() => navigate(item.path)}
-                      >
-                        {item.name}
-                      </MenuItem>
-                    );
-                  })}
-                </MenuContent>
-              </Menu>
-            </div>
+            {navLinks.length > 0 && (
+              <div className="xl:hidden">
+                <Menu>
+                  <MenuTrigger
+                    render={(props) => (
+                      <Button
+                        {...props}
+                        variant="outlined"
+                        aria-label="Open navigation menu"
+                        icon={<MenuIcon size={14} />}
+                      />
+                    )}
+                  />
+                  <MenuContent align="end">
+                    {navLinks.map((item) => {
+                      const NavIcon = item.icon;
+                      return (
+                        <MenuItem
+                          key={item.path}
+                          icon={<NavIcon size={14} />}
+                          active={isNavItemActive(item.path)}
+                          onClick={() => navigate(item.path)}
+                        >
+                          {item.name}
+                        </MenuItem>
+                      );
+                    })}
+                  </MenuContent>
+                </Menu>
+              </div>
+            )}
 
             {/* Dev Role Switcher */}
-            {import.meta.env.DEV && (
+            {import.meta.env.DEV && isAuthenticated && (
               <Menu>
                 <MenuTrigger
                   render={(props) => (

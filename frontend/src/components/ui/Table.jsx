@@ -11,15 +11,17 @@ export function Table({
   ...props
 }) {
   return (
-    <HTMLTable
-      interactive={interactive}
-      bordered={bordered}
-      striped={striped}
-      compact={compact}
-      className={`w-full text-left ${className}`.trim()}
-      {...props}
-    >
-      {children}
-    </HTMLTable>
+    <div className="max-w-full overflow-x-auto">
+      <HTMLTable
+        interactive={interactive}
+        bordered={bordered}
+        striped={striped}
+        compact={compact}
+        className={`w-full text-left ${className}`.trim()}
+        {...props}
+      >
+        {children}
+      </HTMLTable>
+    </div>
   );
 }

@@ -16,11 +16,16 @@ public class SkillGapService {
     private static final Map<String, List<String>> ROLE_SKILLS_MAP = new HashMap<>();
 
     static {
-        ROLE_SKILLS_MAP.put("Backend Developer", Arrays.asList("Java", "Spring Boot", "PostgreSQL", "REST", "Git", "Docker", "Microservices"));
-        ROLE_SKILLS_MAP.put("Frontend Developer", Arrays.asList("JavaScript", "TypeScript", "React", "HTML", "CSS", "Tailwind", "Git"));
-        ROLE_SKILLS_MAP.put("Fullstack Developer", Arrays.asList("Java", "Spring Boot", "JavaScript", "React", "PostgreSQL", "Git", "REST"));
-        ROLE_SKILLS_MAP.put("DevOps Engineer", Arrays.asList("Docker", "Kubernetes", "CI/CD", "AWS", "Linux", "Terraform", "Git"));
-        ROLE_SKILLS_MAP.put("Cloud Engineer", Arrays.asList("AWS", "GCP", "Docker", "Kubernetes", "Linux", "Terraform", "Microservices"));
+        ROLE_SKILLS_MAP.put("Backend Developer",
+                Arrays.asList("Java", "Spring Boot", "PostgreSQL", "REST", "Git", "Docker", "Microservices"));
+        ROLE_SKILLS_MAP.put("Frontend Developer",
+                Arrays.asList("JavaScript", "TypeScript", "React", "HTML", "CSS", "Tailwind", "Git"));
+        ROLE_SKILLS_MAP.put("Fullstack Developer",
+                Arrays.asList("Java", "Spring Boot", "JavaScript", "React", "PostgreSQL", "Git", "REST"));
+        ROLE_SKILLS_MAP.put("DevOps Engineer",
+                Arrays.asList("Docker", "Kubernetes", "CI/CD", "AWS", "Linux", "Terraform", "Git"));
+        ROLE_SKILLS_MAP.put("Cloud Engineer",
+                Arrays.asList("AWS", "GCP", "Docker", "Kubernetes", "Linux", "Terraform", "Microservices"));
     }
 
     public SkillGapService(AtsService atsService, MarketResearchService marketResearchService) {
@@ -54,8 +59,8 @@ public class SkillGapService {
             }
         }
 
-        double matchPercent = requiredSkills.isEmpty() ? 0.0 :
-                Math.round(((double) matched.size() / requiredSkills.size()) * 100.0);
+        double matchPercent = requiredSkills.isEmpty() ? 0.0
+                : Math.round(((double) matched.size() / requiredSkills.size()) * 100.0);
 
         List<String> recommendations = missing.stream()
                 .map(s -> "Enroll in courses teaching " + s)
@@ -92,19 +97,17 @@ public class SkillGapService {
         dto.setCurrentMarketTrends(Arrays.asList(
                 "High demand for cloud-native architectures & containerization",
                 "Increasing adoption of asynchronous event streaming (Kafka/RabbitMQ)",
-                "AI-assisted code development and automated testing pipelines"
-        ));
+                "AI-assisted code development and automated testing pipelines"));
         dto.setEmergingFutureRoles(Arrays.asList(
                 "AI Platform Engineer",
                 "Cloud Cost & FinOps Specialist",
-                "LLM Application Architect"
-        ));
-        dto.setFutureCareerProspect("Strong 5-year growth trajectory with ~22% projected job creation in enterprise IT.");
+                "LLM Application Architect"));
+        dto.setFutureCareerProspect(
+                "Strong 5-year growth trajectory with ~22% projected job creation in enterprise IT.");
         dto.setEvolvingSkillDemands(Arrays.asList(
                 "Kubernetes orchestration",
                 "Observability (Prometheus, OpenTelemetry)",
-                "Vector databases and AI integration APIs"
-        ));
+                "Vector databases and AI integration APIs"));
         return dto;
     }
 
@@ -114,16 +117,13 @@ public class SkillGapService {
         dto.setSuggestedCurriculumAdditions(Arrays.asList(
                 "Hands-on Docker containerization & multi-stage builds",
                 "Spring Boot 3/4 Native GraalVM compilation & modern Observability",
-                "CI/CD GitHub Actions deployment automation"
-        ));
+                "CI/CD GitHub Actions deployment automation"));
         dto.setOutdatedTopicsToRemove(Arrays.asList(
                 "Monolithic XML-based configurations",
-                "Legacy SOAP web services"
-        ));
+                "Legacy SOAP web services"));
         dto.setNewCourseIdeas(Arrays.asList(
                 "Building Cloud-Native Microservices with Spring Boot & Docker",
-                "Fullstack Java & React Production Bootcamp"
-        ));
+                "Fullstack Java & React Production Bootcamp"));
         dto.setMarketRationale("Current hiring trends prioritize containerization and cloud deployment experience.");
         return dto;
     }

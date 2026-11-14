@@ -1,88 +1,48 @@
 # Skill-Track
 
-Role-based trainee, course-provider, skill, and career management platform built with **React 18 + TypeScript + BlueprintJS v5** on the frontend and **Node.js + Express + Prisma (SQLite, Postgres-portable)** on the backend.
+A role-based trainee outcome tracking and career progression platform. The system tracks trainee outcomes beyond course completion, provides skill gap analysis, enables course providers to align syllabi with market demand, and automates quarterly employment follow-ups.
+
+---
 
 ## Architecture Overview
 
-- `client/` — Vite + React 18 + TypeScript SPA using `@blueprintjs/core`, `/icons`, `/select`, `/table`, `/datetime2`, `recharts`, and `bp5-dark` theme toggle.
-- `server/` — Express + TypeScript REST API (`PORT=4000` by default) organized into:
-  - `src/routes/` — HTTP handlers with Zod input validation
-  - `src/middleware/` — httpOnly JWT authentication & RBAC guards (`admin`, `cp`, `trainee`, IT-only AI guard)
-  - `src/services/core/` — Auth, Trainees, Course Providers, Courses, Skills, Enrollments, Employment, Admin analytics
-  - `src/services/email/` — `nodemailer` transport + `node-cron` 3-month quarterly follow-up job
-  - `src/services/ai/` — Isolated LLM adapter (`LLM_API_KEY` server-only), resume ATS token extractor (`pdf-parse`), weekly `/market-docs` updater, IT Career Skill Gap / Role Match / Future Careers, and CP Course Suggestions + Chatbot
-- `prisma/` — Portable Prisma schema (`schema.prisma`), SQLite DB (`dev.db`), and seed script (`seed.ts`)
-- `market-docs/` — Weekly refreshed Markdown briefs used as context by the AI services
+The repository is structured into the following components:
 
-## Environment Variables
+- **[`frontend/`](./frontend)** — React single-page application built with Vite, Tailwind CSS, Radix UI primitives, Lucide icons, and Mock Service Worker (MSW) for offline testing and rapid UI development.
+- **[`backend/`](./backend)** — Spring Boot 3 / Java 21 REST API (`backend-st`) providing:
+  - **Core Service**: Trainee records, course provider onboarding, courses, skills, enrollments, and employment history with PostgreSQL persistence via Spring Data JPA.
+  - **AI Service**: Resume ATS token parsing, skill gap analysis against target industry roles, career progression recommendations, and course provider syllabus improvement.
+  - **Email Service**: Automated quarterly (every 3 months) trainee follow-up scheduler and email notification triggers.
+- **[`database/`](./database)** — PostgreSQL database DDL schemas, comprehensive relational seed data, and data-privacy cleanup scripts:
+  - `tables.sql`: Full database schema including roles, skills, courses, enrollments, employment, and indexes.
+  - `seed.sql`: Rich development and demo datasets.
+  - `cleanup-nonconsent-orphans.sql`: GDPR/privacy enforcement script removing tracking data for non-consenting trainees.
+- **[`docs/`](./docs)** — Architecture design specifications, role access control matrices, and UI page wireframe requirements.
 
-Copy `.env.example` to `.env` at the repository root:
+---
 
+## Getting Started
+
+### 1. Database Setup (PostgreSQL)
+Ensure PostgreSQL is running, create the database, and run the SQL scripts:
 ```bash
-PORT=4000
-NODE_ENV=development
-DATABASE_URL="file:../prisma/dev.db"
-JWT_SECRET="change-this-secret-in-production"
-JWT_EXPIRES_IN="7d"
-CLIENT_ORIGIN="http://localhost:5173"
-
-# Optional SMTP credentials (omit for logged dev-json email transport)
-SMTP_HOST=""
-SMTP_PORT=587
-SMTP_USER=""
-SMTP_PASS=""
-SMTP_FROM="Skill-Track <noreply@skilltrack.local>"
-
-# Optional server-side LLM key (omit for deterministic /market-docs analyzer)
-AI_PROVIDER="openai" # or "gemini"
-LLM_API_KEY=""
-LLM_MODEL="gpt-4o-mini"
+psql -U postgres -d skill_track -f database/tables.sql
+psql -U postgres -d skill_track -f database/seed.sql
 ```
 
-## Setup & Running Locally
+### 2. Backend (Spring Boot)
+Requires Java 21 and Maven:
+```bash
+cd backend
+./mvnw clean spring-boot:run
+```
+The API server starts on `http://localhost:8080`.
 
-1. **Install dependencies**
-
-   ```bash
-   cd server && npm install
-   cd ../client && npm install
-   ```
-
-2. **Generate Prisma client, push schema, and seed sample data**
-
-   ```bash
-   cd server
-   npm run prisma:generate
-   npm run prisma:push
-   npm run seed
-   ```
-
-3. **Run development servers** (in separate terminals)
-
-   ```bash
-   # Terminal 1 — API server (http://localhost:4000)
-   cd server && npm run dev
-
-   # Terminal 2 — React BlueprintJS UI (http://localhost:5173, proxies /api -> 4000)
-   cd client && npm run dev
-   ```
-
-4. **Production build**
-
-   ```bash
-   cd server && npm run build
-   cd ../client && npm run build
-   ```
-
-## Seeded Demo Accounts
-
-Admin accounts cannot be self-registered via `/register`; they are seeded directly into the database.
-
-| Role | Email | Password | Notes |
-| :--- | :--- | :--- | :--- |
-| **Admin** | `admin@skilltrack.local` | `Admin@123!` | Full dashboard, CP approvals, trainee management |
-| **Course Provider (Approved)** | `cp@apexacademy.edu` | `Provider@123!` | Owns courses, AI syllabus suggestions & chatbot |
-| **Course Provider (Approved)** | `cp@cloudcraft.io` | `Provider@123!` | DevOps & Kubernetes courses |
-| **Course Provider (Pending)** | `pending@futurestack.io` | `Provider@123!` | Login blocked (`403`) until Admin approves |
-| **Trainee (IT)** | `aarav.sharma@example.com` | `Trainee@123!` | IT track; AI Skill Gap, Role Match, Future Careers |
-| **Trainee (Non-IT)** | `meera.nair@example.com` | `Trainee@123!` | Non-IT track; AI career tools hidden & `403`-guarded |
+### 3. Frontend (React)
+Requires Node.js 18+:
+```bash
+cd frontend
+npm install
+npm run dev
+```
+The client starts on `http://localhost:5173` with proxy configuration forwarding `/api/v1` calls to the Spring Boot backend on port 8080.

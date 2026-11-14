@@ -2,11 +2,10 @@
 
 ## Admin:
 - can add/update course providers. [core service]
-- add/remove trainees. [core service]
+- remove trainees (with a reason). [core service]
 - access the admin dashboard. [core service]
 - all trainees data access(readonly). [core service]
 - all course providers data access (readonly). [core service]
-- stop email service for certain trainees. [email service]
 
 ## Course provider:
 - can add/remove/update courses. [core service]
@@ -14,6 +13,7 @@
 - all trainees data access (readonly). [core service]
 - suggestions on course improvement based on current market demand. [AI service]
 - chat bot for course providers, for further discussion. [AI service]
+- They can't register like trainees, they have to fill their information, put their login credentials (email and password), and sublit it to admin, admin would verify their application and allow them to create an account. [core service]
 
 ## Trainees:
 - add/modify/delete their information. [core service]
@@ -25,7 +25,7 @@
 - enrol or drop out of courses. (if dropping must give a reason) [core service]
 - upload resume, mention job role/title for skill gap analysis. [AI service]
 - ats system for trainees, which would also help in skill gap analysis, it would extract skills and turn them into tokens. [AI service]
-- can request for remove their employment information/keep the information but forbid to send further emails. [email/core service]
+- can request to remove their employment information or to keep the information but forbid to send further emails. [email/core service]
 
 ---
 
@@ -63,4 +63,4 @@ AI tells you what kind of role is suitable for you based on your skills.
 - New course ideas.
 
 ## **Email service:**
-- Send and email in every 3 months to the trainees/users to fill/update information.www.op
+- Send and email in every 3 months to the trainees/users to fill/update information.
